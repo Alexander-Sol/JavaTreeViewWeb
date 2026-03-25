@@ -4,3 +4,4 @@ dist/
 public/dist/
 .vercel/
 *.local
+.DS_Store
