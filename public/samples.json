@@ -1,0 +1,18 @@
+[
+  {
+    "name": "spellman",
+    "label": "Spellman Yeast Cell Cycle (95 genes x 59 samples)",
+    "files": [
+      "Spellman/spellman.cdt",
+      "Spellman/spellman.gtr",
+      "Spellman/spellman.atr"
+    ]
+  },
+  {
+    "name": "colorTest",
+    "label": "Color Test Dataset (997 genes x 13 samples)",
+    "files": [
+      "colorTest.cdt"
+    ]
+  }
+]

@@ -1,7 +1,4 @@
 {
   "buildCommand": "bun run build",
-  "outputDirectory": "public",
-  "rewrites": [
-    { "source": "/api/(.*)", "destination": "/api/index.ts" }
-  ]
+  "outputDirectory": "public"
 }

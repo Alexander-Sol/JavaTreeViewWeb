@@ -3,14 +3,11 @@
   "version": "0.1.0",
   "description": "Web-based clone of JavaTreeViewer for hierarchical clustering visualization",
   "scripts": {
-    "dev": "bun run api/index.ts",
+    "dev": "bun run build && python3 -m http.server 3000 -d public",
     "build": "bun build src/main.ts --outdir public/dist --target browser --sourcemap=external",
-    "preview": "bun run build && bun run api/index.ts",
+    "preview": "bun run build && python3 -m http.server 3000 -d public",
     "typecheck": "tsc --noEmit",
     "test": "bun test"
-  },
-  "dependencies": {
-    "hono": "^4.7.7"
   },
   "devDependencies": {
     "typescript": "^5.8.3",

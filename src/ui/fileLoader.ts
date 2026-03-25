@@ -43,7 +43,7 @@ export async function loadFromFiles(files: FileList | File[]): Promise<LoadedDat
 }
 
 /**
- * Load a DataModel from URLs (for bundled sample datasets served by Hono).
+ * Load a DataModel from URLs for bundled sample datasets.
  */
 export async function loadFromUrls(
   cdtUrl: string,
@@ -84,7 +84,7 @@ export interface SampleDataset {
 }
 
 export async function fetchSampleList(): Promise<SampleDataset[]> {
-  const res = await fetch('/api/samples')
+  const res = await fetch('/samples.json')
   if (!res.ok) throw new Error('Failed to fetch sample list')
   return res.json() as Promise<SampleDataset[]>
 }
