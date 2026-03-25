@@ -305,9 +305,21 @@ canvas {
   position: absolute;
   pointer-events: none;
   background: rgba(255, 200, 0, 0.15);
+}
+.selection-band[data-axis="gene"] {
+  left: 0; right: 0;
   border-top: 1px solid rgba(255, 200, 0, 0.6);
   border-bottom: 1px solid rgba(255, 200, 0, 0.6);
 }
+.selection-band[data-axis="sample"] {
+  top: 0; bottom: 0;
+  border-left: 1px solid rgba(255, 200, 0, 0.6);
+  border-right: 1px solid rgba(255, 200, 0, 0.6);
+}
+
+/* Drag-to-select cursors on label panels */
+.cell-gene-labels { cursor: ns-resize; }
+.cell-sample-labels { cursor: ew-resize; }
 
 /* ===== Scrollbar style ===== */
 ::-webkit-scrollbar { width: 6px; height: 6px; }

@@ -3,6 +3,7 @@ import { HeatmapRenderer } from './renderers/heatmapRenderer'
 import { DendrogramRenderer } from './renderers/dendrogramRenderer'
 import { ColorScale, COLOR_SCHEMES } from './color/colorScale'
 import { Tooltip } from './ui/tooltip'
+import { computeSelectionRange } from './ui/selectionManager'
 import {
   loadFromFiles,
   loadFromUrls,
@@ -41,8 +42,13 @@ export class App {
   private panStart = { x: 0, y: 0, gOff: 0, sOff: 0 }
   private mouseDownPos: { x: number; y: number } | null = null
 
-  // Row selection state (gene index of first click in a range)
-  private selectionAnchor: number | null = null
+  // Selection state: [lo, hi] indices, null when nothing selected
+  private geneSelection: [number, number] | null = null
+  private sampleSelection: [number, number] | null = null
+
+  // Persistent DOM elements for selection bands (created once)
+  private geneBandEl!: HTMLElement
+  private sampleBandEl!: HTMLElement
 
   // Set to true when a new dataset is loaded; handleResize() will call
   // fitAll() the first time it sees non-zero canvas dimensions.
@@ -57,6 +63,7 @@ export class App {
     this.initControls()
     this.initDropZone()
     this.initPanZoom()
+    this.initLabelSelection()
     this.initResizeObserver()
     this.loadSampleList()
   }
@@ -83,8 +90,20 @@ export class App {
     this.emptyState = q<HTMLElement>('#empty-state')
     this.geneLabelsEl = q<HTMLElement>('#gene-labels')
     this.sampleLabelsEl = q<HTMLElement>('#sample-labels')
-    // gene-labels-cell is used for scroll sync; keep reference
-    q<HTMLElement>('#gene-labels-cell')
+
+    // Create persistent selection band elements
+    const heatmapCell = q<HTMLElement>('#heatmap-cell')
+    this.geneBandEl = document.createElement('div')
+    this.geneBandEl.className = 'selection-band'
+    this.geneBandEl.dataset['axis'] = 'gene'
+    this.geneBandEl.classList.add('hidden')
+    heatmapCell.appendChild(this.geneBandEl)
+
+    this.sampleBandEl = document.createElement('div')
+    this.sampleBandEl.className = 'selection-band'
+    this.sampleBandEl.dataset['axis'] = 'sample'
+    this.sampleBandEl.classList.add('hidden')
+    heatmapCell.appendChild(this.sampleBandEl)
   }
 
   private initRenderers(): void {
@@ -104,8 +123,11 @@ export class App {
       this.viewport,
     )
 
-    // Labels update whenever viewport changes
-    this.viewport.onChange(() => this.updateLabels())
+    // Labels and selection bands update whenever viewport changes
+    this.viewport.onChange(() => {
+      this.updateLabels()
+      this.updateSelectionBands()
+    })
   }
 
   private initControls(): void {
@@ -263,27 +285,8 @@ export class App {
 
       if (wasPan) return  // drag → don't treat as click
 
-      // Click: select the row under cursor
-      if (!this.model) return
-      const rect = canvas.getBoundingClientRect()
-      const canvasY = e.clientY - rect.top
-      const geneIdx = Math.floor(this.viewport.genes.pixelToIndex(canvasY))
-      if (geneIdx < 0 || geneIdx >= this.model.genes.length) {
-        this.clearSelectionBands()
-        this.selectionAnchor = null
-        return
-      }
-
-      if (e.shiftKey && this.selectionAnchor !== null) {
-        // Extend selection to a range
-        const lo = Math.min(this.selectionAnchor, geneIdx)
-        const hi = Math.max(this.selectionAnchor, geneIdx)
-        this.renderSelectionBand(lo, hi, 'gene')
-      } else {
-        // New single-row selection; anchor for future shift+clicks
-        this.selectionAnchor = geneIdx
-        this.renderSelectionBand(geneIdx, geneIdx, 'gene')
-      }
+      // Clean click on heatmap: clear selection
+      this.clearSelection()
     })
 
     canvas.style.cursor = 'crosshair'
@@ -301,8 +304,7 @@ export class App {
       )
       if (node) {
         this.geneTreeRenderer.setSelectedNodeId(node.id)
-        this.renderSelectionBand(node.minIndex, node.maxIndex, 'gene')
-        this.selectionAnchor = node.minIndex
+        this.setGeneSelection(node.minIndex, node.maxIndex)
       }
     })
 
@@ -316,7 +318,7 @@ export class App {
       )
       if (node) {
         this.arrayTreeRenderer.setSelectedNodeId(node.id)
-        this.renderSelectionBand(node.minIndex, node.maxIndex, 'sample')
+        this.setSampleSelection(node.minIndex, node.maxIndex)
       }
     })
   }
@@ -458,59 +460,102 @@ export class App {
   }
 
   // ============================================================
-  // Selection bands
+  // Selection
   // ============================================================
 
-  private renderSelectionBand(
-    minIdx: number,
-    maxIdx: number,
-    axis: 'gene' | 'sample',
-  ): void {
-    this.clearSelectionBands()
-    const band = document.createElement('div')
-    band.className = 'selection-band'
-    band.dataset['axis'] = axis
-
-    const heatmapCell = document.getElementById('heatmap-cell')!
-
-    if (axis === 'gene') {
-      const y0 = this.viewport.genes.indexToPixel(minIdx)
-      const y1 = this.viewport.genes.indexToPixel(maxIdx + 1)
-      band.style.left = '0'
-      band.style.right = '0'
-      band.style.top = `${y0}px`
-      band.style.height = `${Math.max(1, y1 - y0)}px`
-    } else {
-      const x0 = this.viewport.samples.indexToPixel(minIdx)
-      const x1 = this.viewport.samples.indexToPixel(maxIdx + 1)
-      band.style.top = '0'
-      band.style.bottom = '0'
-      band.style.left = `${x0}px`
-      band.style.width = `${Math.max(1, x1 - x0)}px`
-    }
-
-    heatmapCell.appendChild(band)
-
-    // Update band on viewport change
-    this.viewport.onChange(() => {
-      if (!band.isConnected) return
-      if (axis === 'gene') {
-        const y0 = this.viewport.genes.indexToPixel(minIdx)
-        const y1 = this.viewport.genes.indexToPixel(maxIdx + 1)
-        band.style.top = `${y0}px`
-        band.style.height = `${Math.max(1, y1 - y0)}px`
-      } else {
-        const x0 = this.viewport.samples.indexToPixel(minIdx)
-        const x1 = this.viewport.samples.indexToPixel(maxIdx + 1)
-        band.style.left = `${x0}px`
-        band.style.width = `${Math.max(1, x1 - x0)}px`
-      }
-    })
+  private setGeneSelection(lo: number, hi: number): void {
+    this.geneSelection = [lo, hi]
+    this.updateSelectionBands()
   }
 
-  private clearSelectionBands(): void {
-    const heatmapCell = document.getElementById('heatmap-cell')!
-    heatmapCell.querySelectorAll('.selection-band').forEach((el) => el.remove())
+  private setSampleSelection(lo: number, hi: number): void {
+    this.sampleSelection = [lo, hi]
+    this.updateSelectionBands()
+  }
+
+  private clearSelection(): void {
+    this.geneSelection = null
+    this.sampleSelection = null
+    this.geneTreeRenderer.setSelectedNodeId(null)
+    this.arrayTreeRenderer.setSelectedNodeId(null)
+    this.updateSelectionBands()
+  }
+
+  private updateSelectionBands(): void {
+    if (this.geneSelection) {
+      const [lo, hi] = this.geneSelection
+      const y0 = this.viewport.genes.indexToPixel(lo)
+      const y1 = this.viewport.genes.indexToPixel(hi + 1)
+      this.geneBandEl.style.top = `${y0}px`
+      this.geneBandEl.style.height = `${Math.max(1, y1 - y0)}px`
+      this.geneBandEl.classList.remove('hidden')
+    } else {
+      this.geneBandEl.classList.add('hidden')
+    }
+
+    if (this.sampleSelection) {
+      const [lo, hi] = this.sampleSelection
+      const x0 = this.viewport.samples.indexToPixel(lo)
+      const x1 = this.viewport.samples.indexToPixel(hi + 1)
+      this.sampleBandEl.style.left = `${x0}px`
+      this.sampleBandEl.style.width = `${Math.max(1, x1 - x0)}px`
+      this.sampleBandEl.classList.remove('hidden')
+    } else {
+      this.sampleBandEl.classList.add('hidden')
+    }
+  }
+
+  // Drag-to-select on gene-labels panel (selects row range)
+  // Drag-to-select on sample-labels panel (selects column range)
+  private initLabelSelection(): void {
+    const geneCell = document.getElementById('gene-labels-cell')!
+    const sampleCell = document.querySelector<HTMLElement>('.cell-sample-labels')!
+
+    this.initAxisDrag(geneCell, 'gene')
+    this.initAxisDrag(sampleCell, 'sample')
+  }
+
+  private initAxisDrag(cell: HTMLElement, axis: 'gene' | 'sample'): void {
+    let dragStart: number | null = null
+
+    cell.addEventListener('mousedown', (e) => {
+      if (e.button !== 0) return
+      e.preventDefault()
+      const rect = cell.getBoundingClientRect()
+      dragStart = axis === 'gene' ? e.clientY - rect.top : e.clientX - rect.left
+    })
+
+    window.addEventListener('mousemove', (e) => {
+      if (dragStart === null) return
+      if (!this.model) return
+      const rect = cell.getBoundingClientRect()
+      const current = axis === 'gene' ? e.clientY - rect.top : e.clientX - rect.left
+      const axisVp = axis === 'gene' ? this.viewport.genes : this.viewport.samples
+      const count = axis === 'gene' ? this.model.genes.length : this.model.sampleNames.length
+      const range = computeSelectionRange(dragStart, current, axisVp, count)
+      if (range) {
+        if (axis === 'gene') this.setGeneSelection(range.lo, range.hi)
+        else this.setSampleSelection(range.lo, range.hi)
+      }
+    })
+
+    window.addEventListener('mouseup', (e) => {
+      if (dragStart === null) return
+      if (!this.model) {
+        dragStart = null
+        return
+      }
+      const rect = cell.getBoundingClientRect()
+      const end = axis === 'gene' ? e.clientY - rect.top : e.clientX - rect.left
+      const axisVp = axis === 'gene' ? this.viewport.genes : this.viewport.samples
+      const count = axis === 'gene' ? this.model.genes.length : this.model.sampleNames.length
+      const range = computeSelectionRange(dragStart, end, axisVp, count)
+      if (range) {
+        if (axis === 'gene') this.setGeneSelection(range.lo, range.hi)
+        else this.setSampleSelection(range.lo, range.hi)
+      }
+      dragStart = null
+    })
   }
 
   // ============================================================

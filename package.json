@@ -6,7 +6,8 @@
     "dev": "bun run api/index.ts",
     "build": "bun build src/main.ts --outdir public/dist --target browser --sourcemap=external",
     "preview": "bun run build && bun run api/index.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "bun test"
   },
   "dependencies": {
     "hono": "^4.7.7"
