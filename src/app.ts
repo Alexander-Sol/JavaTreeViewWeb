@@ -44,6 +44,10 @@ export class App {
   // Row selection state (gene index of first click in a range)
   private selectionAnchor: number | null = null
 
+  // Set to true when a new dataset is loaded; handleResize() will call
+  // fitAll() the first time it sees non-zero canvas dimensions.
+  private pendingFit = false
+
   // ResizeObserver
   private resizeObserver!: ResizeObserver
 
@@ -374,8 +378,9 @@ export class App {
     const hasArrayTree = model.arrayTree !== null
     this.viewerGrid.style.gridTemplateColumns =
       `${hasGeneTree ? 'var(--gene-tree-w)' : '0px'} 1fr var(--label-w)`
+    // Row order: sample-labels | array-tree (collapses to 0 if absent) | heatmap
     this.viewerGrid.style.gridTemplateRows =
-      `${hasArrayTree ? 'var(--array-tree-h)' : '0px'} 1fr var(--label-h)`
+      `var(--label-h) ${hasArrayTree ? 'var(--array-tree-h)' : '0px'} 1fr`
     this.geneTreeCell.style.display = hasGeneTree ? '' : 'none'
     this.arrayTreeCell.style.display = hasArrayTree ? '' : 'none'
 
@@ -400,11 +405,11 @@ export class App {
     this.emptyState.classList.add('hidden')
     this.viewerGrid.classList.remove('hidden')
 
-    // Fit after a tick (DOM needs to lay out first)
-    requestAnimationFrame(() => {
-      this.handleResize()
-      this.viewport.fitAll()
-    })
+    // Mark that we need to fit once the canvases have non-zero dimensions.
+    // handleResize() (called by ResizeObserver or the rAF below) will trigger
+    // fitAll() the first time it sees a valid canvas size.
+    this.pendingFit = true
+    requestAnimationFrame(() => this.handleResize())
 
     const treeInfo = [
       hasGeneTree ? 'gene tree' : null,
@@ -586,12 +591,20 @@ export class App {
     this.resizeCanvas(this.geneTreeCanvas)
     this.resizeCanvas(this.arrayTreeCanvas)
 
-    // Update viewport available-pixel counts
     const heatmapW = this.heatmapCanvas.width
     const heatmapH = this.heatmapCanvas.height
 
+    if (heatmapW === 0 || heatmapH === 0) return  // layout not ready yet
+
     this.viewport.genes.setSize(heatmapH)
     this.viewport.samples.setSize(heatmapW)
+
+    if (this.pendingFit) {
+      this.pendingFit = false
+      // fitAll calls notify() which re-renders everything, so return after.
+      this.viewport.fitAll()
+      return
+    }
 
     this.heatmapRenderer.render()
     this.geneTreeRenderer.render()

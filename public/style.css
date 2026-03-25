@@ -199,24 +199,24 @@ input[type="range"] {
   width: 100%;
   height: 100%;
   grid-template-columns: var(--gene-tree-w) 1fr var(--label-w);
-  grid-template-rows: var(--array-tree-h) 1fr var(--label-h);
+  grid-template-rows: var(--label-h) var(--array-tree-h) 1fr;
   grid-template-areas:
-    "corner     array-tree   corner-tr"
-    "gene-tree  heatmap      gene-labels"
-    "empty-bl   sample-labels empty-br";
+    "corner   sample-labels  corner-tr"
+    "corner2  array-tree     corner-tr2"
+    "gene-tree heatmap       gene-labels";
 }
 
 /* .hidden is defined globally at the top of this file */
 
 .cell-corner        { grid-area: corner; }
 .cell-corner-tr     { grid-area: corner-tr; }
+.cell-corner2       { grid-area: corner2; }
+.cell-corner-tr2    { grid-area: corner-tr2; }
 .cell-array-tree    { grid-area: array-tree; overflow: hidden; }
 .cell-gene-tree     { grid-area: gene-tree; overflow: hidden; }
 .cell-heatmap       { grid-area: heatmap; overflow: hidden; position: relative; }
 .cell-gene-labels   { grid-area: gene-labels; overflow: hidden; position: relative; }
 .cell-sample-labels { grid-area: sample-labels; overflow: hidden; position: relative; }
-.cell-empty-bl      { grid-area: empty-bl; }
-.cell-empty-br      { grid-area: empty-br; }
 
 canvas {
   display: block;
@@ -251,9 +251,10 @@ canvas {
 }
 
 .sample-label {
-  bottom: 0;
+  /* Anchor at the bottom of the label cell (closest to heatmap), rotate upward */
+  bottom: 2px;
   transform-origin: left bottom;
-  transform: rotate(-65deg) translateX(4px);
+  transform: rotate(-65deg);
   max-width: 160px;
 }
 
