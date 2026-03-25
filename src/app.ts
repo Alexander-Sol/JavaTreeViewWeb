@@ -36,13 +36,16 @@ export class App {
   private viewerWorkspace!: HTMLElement
   private viewerGrid!: HTMLElement
   private detailPane!: HTMLElement
+  private annotationPane!: HTMLElement
   private detailGrid!: HTMLElement
   private detailTitle!: HTMLElement
+  private annotationTitle!: HTMLElement
   private emptyState!: HTMLElement
   private geneLabelsEl!: HTMLElement
   private sampleLabelsEl!: HTMLElement
   private detailGeneLabelsEl!: HTMLElement
   private detailSampleLabelsEl!: HTMLElement
+  private annotationListEl!: HTMLElement
   private heatmapCanvas!: HTMLCanvasElement
   private geneTreeCanvas!: HTMLCanvasElement
   private arrayTreeCanvas!: HTMLCanvasElement
@@ -53,6 +56,7 @@ export class App {
   private arrayTreeCell!: HTMLElement
   private detailGeneTreeCell!: HTMLElement
   private detailArrayTreeCell!: HTMLElement
+  private detailHeatmapCell!: HTMLElement
 
   // Pan state
   private isPanning = false
@@ -64,10 +68,12 @@ export class App {
   private sampleSelection: [number, number] | null = null
   private selectedGeneNodeId: string | null = null
   private selectedSampleNodeId: string | null = null
+  private detailSelectedGeneIndex: number | null = null
 
   // Persistent DOM elements for selection bands (created once)
   private geneBandEl!: HTMLElement
   private sampleBandEl!: HTMLElement
+  private detailGeneBandEl!: HTMLElement
 
   // Set to true when a new dataset is loaded; handleResize() will call
   // fitAll() the first time it sees non-zero canvas dimensions.
@@ -109,18 +115,22 @@ export class App {
     this.viewerWorkspace = q<HTMLElement>('#viewer-workspace')
     this.viewerGrid = q<HTMLElement>('#viewer-grid')
     this.detailPane = q<HTMLElement>('#detail-pane')
+    this.annotationPane = q<HTMLElement>('#annotation-pane')
     this.detailGrid = q<HTMLElement>('#detail-grid')
     this.detailTitle = q<HTMLElement>('#detail-title')
+    this.annotationTitle = q<HTMLElement>('#annotation-title')
     this.emptyState = q<HTMLElement>('#empty-state')
     this.geneLabelsEl = q<HTMLElement>('#gene-labels')
     this.sampleLabelsEl = q<HTMLElement>('#sample-labels')
     this.detailGeneLabelsEl = q<HTMLElement>('#detail-gene-labels')
     this.detailSampleLabelsEl = q<HTMLElement>('#detail-sample-labels')
+    this.annotationListEl = q<HTMLElement>('#annotation-list')
     this.detailHeatmapCanvas = q<HTMLCanvasElement>('#detail-heatmap-canvas')
     this.detailGeneTreeCanvas = q<HTMLCanvasElement>('#detail-gene-tree-canvas')
     this.detailArrayTreeCanvas = q<HTMLCanvasElement>('#detail-array-tree-canvas')
     this.detailGeneTreeCell = q<HTMLElement>('#detail-gene-tree-cell')
     this.detailArrayTreeCell = q<HTMLElement>('#detail-array-tree-cell')
+    this.detailHeatmapCell = q<HTMLElement>('#detail-heatmap-cell')
 
     // Create persistent selection band elements
     const heatmapCell = q<HTMLElement>('#heatmap-cell')
@@ -135,6 +145,12 @@ export class App {
     this.sampleBandEl.dataset['axis'] = 'sample'
     this.sampleBandEl.classList.add('hidden')
     heatmapCell.appendChild(this.sampleBandEl)
+
+    this.detailGeneBandEl = document.createElement('div')
+    this.detailGeneBandEl.className = 'selection-band detail-selection-band'
+    this.detailGeneBandEl.dataset['axis'] = 'gene'
+    this.detailGeneBandEl.classList.add('hidden')
+    this.detailHeatmapCell.appendChild(this.detailGeneBandEl)
   }
 
   private initRenderers(): void {
@@ -174,7 +190,10 @@ export class App {
       this.updateLabels()
       this.updateSelectionBands()
     })
-    this.detailViewport.onChange(() => this.updateDetailLabels())
+    this.detailViewport.onChange(() => {
+      this.updateDetailLabels()
+      this.updateDetailSelectionBand()
+    })
   }
 
   private initControls(): void {
@@ -383,6 +402,7 @@ export class App {
     this.resizeObserver = new ResizeObserver(() => this.handleResize())
     this.resizeObserver.observe(this.viewerWorkspace)
     this.resizeObserver.observe(this.detailPane)
+    this.resizeObserver.observe(this.annotationPane)
   }
 
   // ============================================================
@@ -448,6 +468,8 @@ export class App {
       hasArrayTree,
     )
     this.detailPane.classList.add('hidden')
+    this.annotationPane.classList.add('hidden')
+    this.detailSelectedGeneIndex = null
     this.geneTreeRenderer.setSelectedNodeId(null)
     this.arrayTreeRenderer.setSelectedNodeId(null)
     this.detailGeneTreeRenderer.setSelectedNodeId(null)
@@ -606,6 +628,9 @@ export class App {
     )
     this.detailTitle.textContent = this.makeDetailTitle(detailModel)
     this.detailPane.classList.remove('hidden')
+    this.annotationTitle.textContent = `${detailModel.genes.length} genes`
+    this.renderAnnotationList(detailModel)
+    this.annotationPane.classList.remove('hidden')
     this.pendingDetailFit = true
     requestAnimationFrame(() => this.handleResize())
   }
@@ -614,14 +639,65 @@ export class App {
     this.detailModel = null
     this.pendingDetailFit = false
     this.detailPane.classList.add('hidden')
+    this.annotationPane.classList.add('hidden')
+    this.detailSelectedGeneIndex = null
     this.detailGeneLabelsEl.innerHTML = ''
     this.detailSampleLabelsEl.innerHTML = ''
+    this.annotationListEl.innerHTML = ''
     this.detailGeneTreeRenderer.setSelectedNodeId(null)
     this.detailArrayTreeRenderer.setSelectedNodeId(null)
+    this.updateDetailSelectionBand()
   }
 
   private makeDetailTitle(model: DataModel): string {
     return `${model.genes.length} genes x ${model.sampleNames.length} samples`
+  }
+
+  private renderAnnotationList(model: DataModel): void {
+    this.annotationListEl.innerHTML = ''
+
+    const frag = document.createDocumentFragment()
+    model.genes.forEach((gene, index) => {
+      const item = document.createElement('div')
+      item.className = 'annotation-item'
+      item.dataset['geneIndex'] = String(index)
+      if (index === this.detailSelectedGeneIndex) item.classList.add('is-active')
+      item.addEventListener('click', () => this.selectDetailGene(index))
+
+      const geneEl = document.createElement('div')
+      geneEl.className = 'annotation-gene'
+      geneEl.textContent = gene.yorf || gene.gid || 'Unknown gene'
+
+      const nameEl = document.createElement('div')
+      nameEl.className = 'annotation-name'
+      nameEl.textContent = gene.name.trim() || '(no annotation)'
+
+      item.appendChild(geneEl)
+      item.appendChild(nameEl)
+      frag.appendChild(item)
+    })
+
+    this.annotationListEl.appendChild(frag)
+  }
+
+  private selectDetailGene(index: number): void {
+    if (!this.detailModel || index < 0 || index >= this.detailModel.genes.length) return
+    this.detailSelectedGeneIndex = index
+    this.renderAnnotationList(this.detailModel)
+    this.updateDetailSelectionBand()
+  }
+
+  private updateDetailSelectionBand(): void {
+    if (this.detailSelectedGeneIndex === null || !this.detailModel) {
+      this.detailGeneBandEl.classList.add('hidden')
+      return
+    }
+
+    const y0 = this.detailViewport.genes.indexToPixel(this.detailSelectedGeneIndex)
+    const y1 = this.detailViewport.genes.indexToPixel(this.detailSelectedGeneIndex + 1)
+    this.detailGeneBandEl.style.top = `${y0}px`
+    this.detailGeneBandEl.style.height = `${Math.max(1, y1 - y0)}px`
+    this.detailGeneBandEl.classList.remove('hidden')
   }
 
   // Drag-to-select on gene-labels panel (selects row range)
