@@ -5,6 +5,8 @@
   padding: 0;
 }
 
+.hidden { display: none !important; }
+
 :root {
   --bg: #1a1a1a;
   --surface: #242424;
@@ -204,7 +206,7 @@ input[type="range"] {
     "empty-bl   sample-labels empty-br";
 }
 
-.viewer-grid.hidden { display: none; }
+/* .hidden is defined globally at the top of this file */
 
 .cell-corner        { grid-area: corner; }
 .cell-corner-tr     { grid-area: corner-tr; }
@@ -277,7 +279,7 @@ canvas {
   box-shadow: 0 4px 12px rgba(0,0,0,0.4);
 }
 
-.tooltip.hidden { display: none; }
+/* .tooltip visibility handled by global .hidden class */
 
 .tooltip-gene { font-weight: 600; color: var(--text); }
 .tooltip-sample { color: var(--text-muted); }
