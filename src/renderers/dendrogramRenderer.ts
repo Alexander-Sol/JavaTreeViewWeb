@@ -4,6 +4,8 @@ import type { Viewport } from './viewport'
 
 export type DendrogramOrientation = 'left' | 'top'
 
+const HIT_TEST_RADIUS_PX = 12
+
 /**
  * DendrogramRenderer draws a hierarchical clustering dendrogram onto a canvas.
  *
@@ -79,6 +81,9 @@ export class DendrogramRenderer {
 
     // Correlation → pixel on the depth axis
     const corrToPixel = this.makeCorrToPixel(width, height)
+    const selectedSubtree = this.selectedNodeId
+      ? findNodeById(this.tree, this.selectedNodeId)
+      : null
 
     // Traverse tree iteratively, drawing each internal node
     const stack: TreeNode[] = [this.tree]
@@ -99,7 +104,7 @@ export class DendrogramRenderer {
       if (!left.isLeaf) stack.push(left)
       if (!right.isLeaf) stack.push(right)
 
-      this.drawNode(node, left, right, indexAxis, corrToPixel)
+      this.drawNode(node, left, right, indexAxis, corrToPixel, selectedSubtree)
     }
   }
 
@@ -120,6 +125,7 @@ export class DendrogramRenderer {
     right: TreeNode,
     indexAxis: AxisViewport,
     corrToPixel: (corr: number) => number,
+    selectedSubtree: TreeNode | null,
   ): void {
     // Pixel positions for child centers (index axis)
     const leftCenter = indexAxis.indexToPixel(left.index + 0.5)
@@ -131,7 +137,7 @@ export class DendrogramRenderer {
     const rightDepth = corrToPixel(right.correlation)
 
     // Determine if this node or any ancestor is selected (for color)
-    const isSelected = this.selectedNodeId !== null && this.isInSelectedSubtree(node)
+    const isSelected = selectedSubtree !== null && containsNode(selectedSubtree, node.id)
     this.ctx.strokeStyle = isSelected ? this.selectedColor : this.lineColor
 
     this.ctx.beginPath()
@@ -179,15 +185,6 @@ export class DendrogramRenderer {
   }
 
   /**
-   * Check if the given node is within the currently selected subtree.
-   * Simple check: if selected node id matches or is an ancestor.
-   */
-  private isInSelectedSubtree(node: TreeNode): boolean {
-    if (!this.selectedNodeId) return false
-    return containsNode(node, this.selectedNodeId)
-  }
-
-  /**
    * Hit-test: find the tree node nearest to a click at the given canvas coordinates.
    * Returns the nearest internal node or null.
    */
@@ -197,6 +194,9 @@ export class DendrogramRenderer {
     const { width, height } = this.canvas
     const indexAxis = this.orientation === 'left' ? this.viewport.genes : this.viewport.samples
     const corrToPixel = this.makeCorrToPixel(width, height)
+    const dimSize = this.orientation === 'left' ? height : width
+    const visFirst = Math.max(0, indexAxis.pixelToIndex(0) - 1)
+    const visLast = indexAxis.pixelToIndex(dimSize) + 1
 
     let best: TreeNode | null = null
     let bestDist = Infinity
@@ -208,20 +208,24 @@ export class DendrogramRenderer {
       if (node.left && !node.left.isLeaf) stack.push(node.left)
       if (node.right && !node.right.isLeaf) stack.push(node.right)
 
-      const depthPx = corrToPixel(node.correlation)
-      const centerPx = indexAxis.indexToPixel(node.index + 0.5)
+      if (node.maxIndex < visFirst || node.minIndex > visLast) continue
 
-      const nx = this.orientation === 'left' ? depthPx : centerPx
-      const ny = this.orientation === 'left' ? centerPx : depthPx
+      const dist = computeNodeHitDistance(
+        node,
+        this.orientation,
+        indexAxis,
+        corrToPixel,
+        canvasX,
+        canvasY,
+      )
 
-      const dist = Math.hypot(canvasX - nx, canvasY - ny)
       if (dist < bestDist) {
         bestDist = dist
         best = node
       }
     }
 
-    return best
+    return bestDist <= HIT_TEST_RADIUS_PX ? best : null
   }
 
   destroy(): void {
@@ -240,4 +244,68 @@ function containsNode(root: TreeNode, targetId: string): boolean {
     (root.left ? containsNode(root.left, targetId) : false) ||
     (root.right ? containsNode(root.right, targetId) : false)
   )
+}
+
+function findNodeById(root: TreeNode, targetId: string): TreeNode | null {
+  if (root.id === targetId) return root
+  if (root.isLeaf) return null
+  return (
+    (root.left ? findNodeById(root.left, targetId) : null) ||
+    (root.right ? findNodeById(root.right, targetId) : null)
+  )
+}
+
+export function isNodeInSelectedSubtree(root: TreeNode, selectedNodeId: string, nodeId: string): boolean {
+  const selectedSubtree = findNodeById(root, selectedNodeId)
+  return selectedSubtree !== null && containsNode(selectedSubtree, nodeId)
+}
+
+export function computeNodeHitDistance(
+  node: TreeNode,
+  orientation: DendrogramOrientation,
+  indexAxis: AxisViewport,
+  corrToPixel: (corr: number) => number,
+  canvasX: number,
+  canvasY: number,
+): number {
+  if (node.isLeaf || !node.left || !node.right) return Infinity
+
+  const leftCenter = indexAxis.indexToPixel(node.left.index + 0.5)
+  const rightCenter = indexAxis.indexToPixel(node.right.index + 0.5)
+  const nodeDepth = corrToPixel(node.correlation)
+  const leftDepth = corrToPixel(node.left.correlation)
+  const rightDepth = corrToPixel(node.right.correlation)
+
+  if (orientation === 'left') {
+    return Math.min(
+      pointToSegmentDistance(canvasX, canvasY, leftDepth, leftCenter, nodeDepth, leftCenter),
+      pointToSegmentDistance(canvasX, canvasY, nodeDepth, leftCenter, nodeDepth, rightCenter),
+      pointToSegmentDistance(canvasX, canvasY, nodeDepth, rightCenter, rightDepth, rightCenter),
+    )
+  }
+
+  return Math.min(
+    pointToSegmentDistance(canvasX, canvasY, leftCenter, leftDepth, leftCenter, nodeDepth),
+    pointToSegmentDistance(canvasX, canvasY, leftCenter, nodeDepth, rightCenter, nodeDepth),
+    pointToSegmentDistance(canvasX, canvasY, rightCenter, nodeDepth, rightCenter, rightDepth),
+  )
+}
+
+export function pointToSegmentDistance(
+  px: number,
+  py: number,
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number,
+): number {
+  const dx = x2 - x1
+  const dy = y2 - y1
+
+  if (dx === 0 && dy === 0) return Math.hypot(px - x1, py - y1)
+
+  const t = Math.max(0, Math.min(1, ((px - x1) * dx + (py - y1) * dy) / (dx * dx + dy * dy)))
+  const projX = x1 + t * dx
+  const projY = y1 + t * dy
+  return Math.hypot(px - projX, py - projY)
 }

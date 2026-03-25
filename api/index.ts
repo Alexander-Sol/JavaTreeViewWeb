@@ -9,7 +9,7 @@ app.get('/api/samples', (c) => {
     {
       name: 'spellman',
       label: 'Spellman Yeast Cell Cycle (95 genes × 59 samples)',
-      files: ['spellman.cdt'],
+      files: ['Spellman/spellman.cdt', 'Spellman/spellman.gtr', 'Spellman/spellman.atr'],
     },
     {
       name: 'colorTest',
