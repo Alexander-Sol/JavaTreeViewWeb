@@ -1,0 +1,139 @@
+import type { CdtData, GeneRow } from '../model/types'
+
+/**
+ * Column names that are metadata (not expression data).
+ * Order matters: defines which columns appear before the data columns.
+ */
+const META_COLS = new Set(['GID', 'YORF', 'NAME', 'FGCOLOR', 'BGCOLOR', 'GWEIGHT'])
+
+/**
+ * Row identifiers that mark special metadata rows (not gene data rows).
+ */
+const SKIP_ROW_IDS = new Set(['EWEIGHT', 'BGCOLOR', 'FGCOLOR'])
+
+/**
+ * Parse a CDT (Cluster Document Text) tab-delimited file.
+ *
+ * Handles two formats:
+ *   - GID format  (spellman):   GID | YORF | NAME | GWEIGHT | [samples...]
+ *   - YORF format (colorTest):  YORF | NAME | FGCOLOR | BGCOLOR | GWEIGHT | [samples...]
+ *
+ * Special rows (AID, EWEIGHT, BGCOLOR, FGCOLOR) are recognised and skipped
+ * or recorded appropriately.
+ */
+export function parseCdt(text: string): CdtData {
+  const lines = text.split(/\r?\n/)
+
+  // ---- Parse header row ----
+  const headerTokens = splitLine(lines[0] ?? '')
+  const colIndex = buildColIndex(headerTokens)
+
+  const hasGID = colIndex.has('GID')
+
+  // The first column that is not a known metadata column is the start of data
+  let dataStartCol = 0
+  for (let i = 0; i < headerTokens.length; i++) {
+    const h = (headerTokens[i] ?? '').toUpperCase()
+    if (!META_COLS.has(h)) {
+      dataStartCol = i
+      break
+    }
+  }
+
+  // Sample names: everything from dataStartCol onward in the header row
+  const sampleNames = headerTokens.slice(dataStartCol).map((s) => s.trim())
+
+  let arrayIds: string[] | null = null
+  const genes: GeneRow[] = []
+
+  // ---- Parse remaining rows ----
+  for (let li = 1; li < lines.length; li++) {
+    const line = lines[li]
+    if (line === undefined || line.trim() === '') continue
+
+    const tokens = splitLine(line)
+    const firstToken = (tokens[0] ?? '').trim().toUpperCase()
+
+    // AID row: contains array/sample tree leaf IDs
+    if (firstToken === 'AID') {
+      arrayIds = tokens.slice(dataStartCol).map((s) => s.trim())
+      continue
+    }
+
+    // Skip other metadata rows
+    if (SKIP_ROW_IDS.has(firstToken)) continue
+
+    // Data row
+    const gene = parseGeneRow(tokens, colIndex, dataStartCol, hasGID)
+    genes.push(gene)
+  }
+
+  return { sampleNames, arrayIds, genes, hasGID }
+}
+
+// ============================================================
+// Internal helpers
+// ============================================================
+
+/**
+ * Split a tab-delimited line, handling quoted fields (e.g. "RGR1, name").
+ */
+function splitLine(line: string): string[] {
+  const result: string[] = []
+  let current = ''
+  let inQuote = false
+
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i]!
+    if (ch === '"') {
+      inQuote = !inQuote
+    } else if (ch === '\t' && !inQuote) {
+      result.push(current)
+      current = ''
+    } else {
+      current += ch
+    }
+  }
+  result.push(current)
+  return result
+}
+
+/**
+ * Build a map from upper-cased column name → column index.
+ */
+function buildColIndex(headers: string[]): Map<string, number> {
+  const map = new Map<string, number>()
+  for (let i = 0; i < headers.length; i++) {
+    const h = (headers[i] ?? '').trim().toUpperCase()
+    if (h && !map.has(h)) map.set(h, i)
+  }
+  return map
+}
+
+function parseGeneRow(
+  tokens: string[],
+  colIndex: Map<string, number>,
+  dataStartCol: number,
+  hasGID: boolean,
+): GeneRow {
+  const get = (key: string): string => {
+    const idx = colIndex.get(key)
+    return idx !== undefined ? (tokens[idx] ?? '').trim() : ''
+  }
+
+  const gid = hasGID ? get('GID') || null : null
+  const yorf = get('YORF')
+  const name = get('NAME')
+  const gweightStr = get('GWEIGHT')
+  const gweight = gweightStr !== '' ? parseFloat(gweightStr) : 1.0
+
+  const rawValues = tokens.slice(dataStartCol)
+  const values: (number | null)[] = rawValues.map((v) => {
+    const s = v.trim()
+    if (s === '') return null
+    const n = parseFloat(s)
+    return isNaN(n) ? null : n
+  })
+
+  return { gid, yorf, name, gweight, values }
+}
