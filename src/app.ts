@@ -75,6 +75,8 @@ export class App {
     this.emptyState = q<HTMLElement>('#empty-state')
     this.geneLabelsEl = q<HTMLElement>('#gene-labels')
     this.sampleLabelsEl = q<HTMLElement>('#sample-labels')
+    // gene-labels-cell is used for scroll sync; keep reference
+    q<HTMLElement>('#gene-labels-cell')
   }
 
   private initRenderers(): void {

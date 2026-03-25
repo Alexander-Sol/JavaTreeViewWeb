@@ -65,10 +65,13 @@
     <div id="viewer-grid" class="viewer-grid hidden">
       <!-- Top-left corner: empty -->
       <div class="cell-corner"></div>
-      <!-- Top: array (column) dendrogram -->
+      <!-- Top-center: array (column) dendrogram -->
       <div class="cell-array-tree">
         <canvas id="array-tree-canvas"></canvas>
       </div>
+      <!-- Top-right: empty -->
+      <div class="cell-corner-tr"></div>
+
       <!-- Left: gene (row) dendrogram -->
       <div class="cell-gene-tree">
         <canvas id="gene-tree-canvas"></canvas>
@@ -76,14 +79,20 @@
       <!-- Center: heatmap -->
       <div class="cell-heatmap" id="heatmap-cell">
         <canvas id="heatmap-canvas"></canvas>
+      </div>
+      <!-- Right: gene name labels -->
+      <div class="cell-gene-labels" id="gene-labels-cell">
         <div id="gene-labels" class="gene-labels"></div>
       </div>
+
       <!-- Bottom-left: empty -->
       <div class="cell-empty-bl"></div>
-      <!-- Bottom: sample labels -->
+      <!-- Bottom-center: sample labels -->
       <div class="cell-sample-labels">
         <div id="sample-labels" class="sample-labels"></div>
       </div>
+      <!-- Bottom-right: empty -->
+      <div class="cell-empty-br"></div>
     </div>
   </main>
 

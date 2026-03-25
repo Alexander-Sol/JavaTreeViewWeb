@@ -28,10 +28,9 @@ app.use('/dist/*', serveStatic({ root: './public' }))
 // Serve everything else as static from public/
 app.use('/*', serveStatic({ root: './public' }))
 
-export default app
-
-// Dev server entry (bun run dev)
-if (import.meta.main) {
-  Bun.serve({ fetch: app.fetch, port: 3000 })
-  console.log('JTV Web running at http://localhost:3000')
+// Bun auto-detects the default export's fetch handler and starts the server.
+// For Vercel, the default export is used by the Edge adapter.
+export default {
+  port: 3000,
+  fetch: app.fetch,
 }

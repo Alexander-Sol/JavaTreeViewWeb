@@ -199,19 +199,22 @@ input[type="range"] {
   grid-template-columns: var(--gene-tree-w) 1fr var(--label-w);
   grid-template-rows: var(--array-tree-h) 1fr var(--label-h);
   grid-template-areas:
-    "corner  array-tree  ."
-    "gene-tree  heatmap  ."
-    ".  sample-labels  .";
+    "corner     array-tree   corner-tr"
+    "gene-tree  heatmap      gene-labels"
+    "empty-bl   sample-labels empty-br";
 }
 
 .viewer-grid.hidden { display: none; }
 
-.cell-corner      { grid-area: corner; }
-.cell-array-tree  { grid-area: array-tree; overflow: hidden; }
-.cell-gene-tree   { grid-area: gene-tree; overflow: hidden; }
-.cell-heatmap     { grid-area: heatmap; overflow: hidden; position: relative; }
+.cell-corner        { grid-area: corner; }
+.cell-corner-tr     { grid-area: corner-tr; }
+.cell-array-tree    { grid-area: array-tree; overflow: hidden; }
+.cell-gene-tree     { grid-area: gene-tree; overflow: hidden; }
+.cell-heatmap       { grid-area: heatmap; overflow: hidden; position: relative; }
+.cell-gene-labels   { grid-area: gene-labels; overflow: hidden; position: relative; }
 .cell-sample-labels { grid-area: sample-labels; overflow: hidden; position: relative; }
-.cell-empty-bl    { grid-area: none; }
+.cell-empty-bl      { grid-area: empty-bl; }
+.cell-empty-br      { grid-area: empty-br; }
 
 canvas {
   display: block;
@@ -222,10 +225,7 @@ canvas {
 /* ===== Labels ===== */
 .gene-labels {
   position: absolute;
-  top: 0;
-  right: 0;
-  width: var(--label-w);
-  height: 100%;
+  inset: 0;
   overflow: hidden;
   pointer-events: none;
 }
@@ -244,7 +244,7 @@ canvas {
 
 .gene-label {
   left: 4px;
-  max-width: calc(var(--label-w) - 8px);
+  right: 4px;
   transform: translateY(-50%);
 }
 
@@ -252,7 +252,7 @@ canvas {
   bottom: 0;
   transform-origin: left bottom;
   transform: rotate(-65deg) translateX(4px);
-  max-width: 120px;
+  max-width: 160px;
 }
 
 .sample-labels {
