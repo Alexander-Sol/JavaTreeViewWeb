@@ -20,6 +20,7 @@
   --array-tree-h: 100px;
   --label-w: 160px;
   --label-h: 80px;
+  --viewer-w: 50%;
 }
 
 html, body {
@@ -134,9 +135,11 @@ input[type="range"] {
 /* ===== Main viewer area ===== */
 #viewer-container {
   position: relative;
-  width: 100%;
+  width: var(--viewer-w);
+  min-width: 420px;
   height: calc(100vh - var(--toolbar-h));
   overflow: hidden;
+  border-right: 1px solid var(--border);
 }
 
 /* ===== Drop overlay ===== */
@@ -193,25 +196,28 @@ input[type="range"] {
   color: var(--text-muted);
 }
 
-/* ===== Viewer grid ===== */
+/* ===== Viewer grid =====
+   Columns: gene-labels (left) | gene-tree | heatmap
+   Rows:    sample-labels (top) | array-tree | heatmap-row
+*/
 .viewer-grid {
   display: grid;
   width: 100%;
   height: 100%;
-  grid-template-columns: var(--gene-tree-w) 1fr var(--label-w);
+  grid-template-columns: var(--label-w) var(--gene-tree-w) 1fr;
   grid-template-rows: var(--label-h) var(--array-tree-h) 1fr;
   grid-template-areas:
-    "corner   sample-labels  corner-tr"
-    "corner2  array-tree     corner-tr2"
-    "gene-tree heatmap       gene-labels";
+    "corner        corner2      sample-labels"
+    "corner3       corner4      array-tree"
+    "gene-labels   gene-tree    heatmap";
 }
 
 /* .hidden is defined globally at the top of this file */
 
 .cell-corner        { grid-area: corner; }
-.cell-corner-tr     { grid-area: corner-tr; }
-.cell-corner2       { grid-area: corner2; }
-.cell-corner-tr2    { grid-area: corner-tr2; }
+.cell-corner-tr     { grid-area: corner2; }
+.cell-corner2       { grid-area: corner3; }
+.cell-corner-tr2    { grid-area: corner4; }
 .cell-array-tree    { grid-area: array-tree; overflow: hidden; }
 .cell-gene-tree     { grid-area: gene-tree; overflow: hidden; }
 .cell-heatmap       { grid-area: heatmap; overflow: hidden; position: relative; }

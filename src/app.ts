@@ -376,9 +376,10 @@ export class App {
     // Show/hide tree panels — update CSS grid track sizes so empty tracks collapse
     const hasGeneTree = model.geneTree !== null
     const hasArrayTree = model.arrayTree !== null
+    // Columns: gene-labels | gene-tree (collapses when absent) | heatmap
     this.viewerGrid.style.gridTemplateColumns =
-      `${hasGeneTree ? 'var(--gene-tree-w)' : '0px'} 1fr var(--label-w)`
-    // Row order: sample-labels | array-tree (collapses to 0 if absent) | heatmap
+      `var(--label-w) ${hasGeneTree ? 'var(--gene-tree-w)' : '0px'} 1fr`
+    // Rows: sample-labels | array-tree (collapses when absent) | heatmap
     this.viewerGrid.style.gridTemplateRows =
       `var(--label-h) ${hasArrayTree ? 'var(--array-tree-h)' : '0px'} 1fr`
     this.geneTreeCell.style.display = hasGeneTree ? '' : 'none'
