@@ -92,6 +92,39 @@ export function buildDataModel(
   }
 }
 
+export function buildSubsetModel(
+  model: DataModel,
+  geneRange: [number, number] | null,
+  sampleRange: [number, number] | null,
+): DataModel {
+  const [geneLo, geneHi] = normalizeRange(geneRange, model.genes.length)
+  const [sampleLo, sampleHi] = normalizeRange(sampleRange, model.sampleNames.length)
+
+  const genes = model.genes.slice(geneLo, geneHi + 1)
+  const sampleNames = model.sampleNames.slice(sampleLo, sampleHi + 1)
+  const expressionMatrix = model.expressionMatrix
+    .slice(geneLo, geneHi + 1)
+    .map((row) => row.slice(sampleLo, sampleHi + 1))
+
+  const geneTree = geneRange
+    ? sliceTreeToRange(model.geneTree, geneLo, geneHi)
+    : model.geneTree
+  const arrayTree = sampleRange
+    ? sliceTreeToRange(model.arrayTree, sampleLo, sampleHi)
+    : model.arrayTree
+
+  return {
+    genes,
+    sampleNames,
+    expressionMatrix,
+    geneTree,
+    arrayTree,
+    geneTreeCorrMin: computeCorrMin(geneTree),
+    arrayTreeCorrMin: computeCorrMin(arrayTree),
+    ...computeValueStats(expressionMatrix),
+  }
+}
+
 // ============================================================
 // Tree building
 // ============================================================
@@ -237,4 +270,96 @@ function inOrderLeafIndices(root: TreeNode): number[] {
   }
 
   return result
+}
+
+function normalizeRange(range: [number, number] | null, count: number): [number, number] {
+  if (count <= 0) return [0, -1]
+  if (!range) return [0, count - 1]
+
+  return [
+    clamp(Math.min(range[0], range[1]), 0, count - 1),
+    clamp(Math.max(range[0], range[1]), 0, count - 1),
+  ]
+}
+
+function sliceTreeToRange(root: TreeNode | null, lo: number, hi: number): TreeNode | null {
+  if (!root) return null
+  if (root.maxIndex < lo || root.minIndex > hi) return null
+
+  if (root.isLeaf) {
+    if (root.index < lo || root.index > hi) return null
+    const nextIndex = root.index - lo
+    return {
+      ...root,
+      index: nextIndex,
+      minIndex: nextIndex,
+      maxIndex: nextIndex,
+      left: null,
+      right: null,
+    }
+  }
+
+  const left = sliceTreeToRange(root.left, lo, hi)
+  const right = sliceTreeToRange(root.right, lo, hi)
+
+  if (!left) return right
+  if (!right) return left
+
+  return {
+    id: root.id,
+    correlation: root.correlation,
+    index: (left.index + right.index) / 2,
+    minIndex: Math.min(left.minIndex, right.minIndex),
+    maxIndex: Math.max(left.maxIndex, right.maxIndex),
+    isLeaf: false,
+    left,
+    right,
+  }
+}
+
+function computeCorrMin(root: TreeNode | null): number {
+  if (!root) return 0
+
+  let corrMin = 1.0
+  const stack: TreeNode[] = [root]
+  while (stack.length > 0) {
+    const node = stack.pop()!
+    if (node.isLeaf) continue
+    if (node.correlation < corrMin) corrMin = node.correlation
+    if (node.left) stack.push(node.left)
+    if (node.right) stack.push(node.right)
+  }
+
+  return !isFinite(corrMin) || corrMin >= 1.0 ? -0.5 : corrMin
+}
+
+function computeValueStats(expressionMatrix: (number | null)[][]): Pick<DataModel, 'valueMin' | 'valueMax' | 'valueMeanAbsolute'> {
+  let valueMin = Infinity
+  let valueMax = -Infinity
+  let absSum = 0
+  let absCount = 0
+
+  for (const row of expressionMatrix) {
+    for (const v of row) {
+      if (v !== null) {
+        if (v < valueMin) valueMin = v
+        if (v > valueMax) valueMax = v
+        absSum += Math.abs(v)
+        absCount++
+      }
+    }
+  }
+
+  if (!isFinite(valueMin)) valueMin = 0
+  if (!isFinite(valueMax)) valueMax = 0
+
+  return {
+    valueMin,
+    valueMax,
+    valueMeanAbsolute: absCount > 0 ? absSum / absCount : 1,
+  }
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value))
 }

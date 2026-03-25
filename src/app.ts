@@ -4,6 +4,7 @@ import { DendrogramRenderer } from './renderers/dendrogramRenderer'
 import { ColorScale, COLOR_SCHEMES } from './color/colorScale'
 import { Tooltip } from './ui/tooltip'
 import { computeSelectionRange } from './ui/selectionManager'
+import { buildSubsetModel } from './model/dataModel'
 import {
   loadFromFiles,
   loadFromUrls,
@@ -18,24 +19,40 @@ export class App {
   private viewport = new Viewport()
   private colorScale = new ColorScale(COLOR_SCHEMES.YellowBlue, 3)
   private model: DataModel | null = null
+  private detailModel: DataModel | null = null
 
   // Renderers
   private heatmapRenderer!: HeatmapRenderer
   private geneTreeRenderer!: DendrogramRenderer
   private arrayTreeRenderer!: DendrogramRenderer
+  private detailViewport = new Viewport()
+  private detailHeatmapRenderer!: HeatmapRenderer
+  private detailGeneTreeRenderer!: DendrogramRenderer
+  private detailArrayTreeRenderer!: DendrogramRenderer
 
   // UI elements
   private tooltip!: Tooltip
   private statusBar!: HTMLElement
+  private viewerWorkspace!: HTMLElement
   private viewerGrid!: HTMLElement
+  private detailPane!: HTMLElement
+  private detailGrid!: HTMLElement
+  private detailTitle!: HTMLElement
   private emptyState!: HTMLElement
   private geneLabelsEl!: HTMLElement
   private sampleLabelsEl!: HTMLElement
+  private detailGeneLabelsEl!: HTMLElement
+  private detailSampleLabelsEl!: HTMLElement
   private heatmapCanvas!: HTMLCanvasElement
   private geneTreeCanvas!: HTMLCanvasElement
   private arrayTreeCanvas!: HTMLCanvasElement
+  private detailHeatmapCanvas!: HTMLCanvasElement
+  private detailGeneTreeCanvas!: HTMLCanvasElement
+  private detailArrayTreeCanvas!: HTMLCanvasElement
   private geneTreeCell!: HTMLElement
   private arrayTreeCell!: HTMLElement
+  private detailGeneTreeCell!: HTMLElement
+  private detailArrayTreeCell!: HTMLElement
 
   // Pan state
   private isPanning = false
@@ -45,6 +62,8 @@ export class App {
   // Selection state: [lo, hi] indices, null when nothing selected
   private geneSelection: [number, number] | null = null
   private sampleSelection: [number, number] | null = null
+  private selectedGeneNodeId: string | null = null
+  private selectedSampleNodeId: string | null = null
 
   // Persistent DOM elements for selection bands (created once)
   private geneBandEl!: HTMLElement
@@ -53,6 +72,7 @@ export class App {
   // Set to true when a new dataset is loaded; handleResize() will call
   // fitAll() the first time it sees non-zero canvas dimensions.
   private pendingFit = false
+  private pendingDetailFit = false
 
   // ResizeObserver
   private resizeObserver!: ResizeObserver
@@ -86,10 +106,21 @@ export class App {
     this.arrayTreeCell = q<HTMLElement>('.cell-array-tree')
     this.tooltip = new Tooltip(q<HTMLElement>('#tooltip'))
     this.statusBar = q<HTMLElement>('#status-bar')
+    this.viewerWorkspace = q<HTMLElement>('#viewer-workspace')
     this.viewerGrid = q<HTMLElement>('#viewer-grid')
+    this.detailPane = q<HTMLElement>('#detail-pane')
+    this.detailGrid = q<HTMLElement>('#detail-grid')
+    this.detailTitle = q<HTMLElement>('#detail-title')
     this.emptyState = q<HTMLElement>('#empty-state')
     this.geneLabelsEl = q<HTMLElement>('#gene-labels')
     this.sampleLabelsEl = q<HTMLElement>('#sample-labels')
+    this.detailGeneLabelsEl = q<HTMLElement>('#detail-gene-labels')
+    this.detailSampleLabelsEl = q<HTMLElement>('#detail-sample-labels')
+    this.detailHeatmapCanvas = q<HTMLCanvasElement>('#detail-heatmap-canvas')
+    this.detailGeneTreeCanvas = q<HTMLCanvasElement>('#detail-gene-tree-canvas')
+    this.detailArrayTreeCanvas = q<HTMLCanvasElement>('#detail-array-tree-canvas')
+    this.detailGeneTreeCell = q<HTMLElement>('#detail-gene-tree-cell')
+    this.detailArrayTreeCell = q<HTMLElement>('#detail-array-tree-cell')
 
     // Create persistent selection band elements
     const heatmapCell = q<HTMLElement>('#heatmap-cell')
@@ -122,12 +153,28 @@ export class App {
       'top',
       this.viewport,
     )
+    this.detailHeatmapRenderer = new HeatmapRenderer(
+      this.detailHeatmapCanvas,
+      this.colorScale,
+      this.detailViewport,
+    )
+    this.detailGeneTreeRenderer = new DendrogramRenderer(
+      this.detailGeneTreeCanvas,
+      'left',
+      this.detailViewport,
+    )
+    this.detailArrayTreeRenderer = new DendrogramRenderer(
+      this.detailArrayTreeCanvas,
+      'top',
+      this.detailViewport,
+    )
 
     // Labels and selection bands update whenever viewport changes
     this.viewport.onChange(() => {
       this.updateLabels()
       this.updateSelectionBands()
     })
+    this.detailViewport.onChange(() => this.updateDetailLabels())
   }
 
   private initControls(): void {
@@ -157,7 +204,9 @@ export class App {
       const name = colorSchemeEl.value as keyof typeof COLOR_SCHEMES
       this.colorScale.setScheme(COLOR_SCHEMES[name])
       this.heatmapRenderer.setColorScale(this.colorScale)
+      this.detailHeatmapRenderer.setColorScale(this.colorScale)
       this.updateLabels()
+      this.updateDetailLabels()
     })
 
     // Contrast slider
@@ -168,6 +217,7 @@ export class App {
       this.colorScale.setContrast(val)
       display.textContent = val.toFixed(1)
       this.heatmapRenderer.render()
+      this.detailHeatmapRenderer.render()
     }
     slider.addEventListener('input', syncContrast)
 
@@ -190,6 +240,10 @@ export class App {
     document.getElementById('zoom-out-x')!.addEventListener('click', () => {
       this.viewport.samples.zoomCenter(1 / ZOOM_FACTOR)
       this.viewport.notify()
+    })
+
+    document.getElementById('detail-close')!.addEventListener('click', () => {
+      this.clearSelection()
     })
   }
 
@@ -303,6 +357,7 @@ export class App {
         e.clientY - rect.top,
       )
       if (node) {
+        this.selectedGeneNodeId = node.id
         this.geneTreeRenderer.setSelectedNodeId(node.id)
         this.setGeneSelection(node.minIndex, node.maxIndex)
       }
@@ -317,6 +372,7 @@ export class App {
         e.clientY - rect.top,
       )
       if (node) {
+        this.selectedSampleNodeId = node.id
         this.arrayTreeRenderer.setSelectedNodeId(node.id)
         this.setSampleSelection(node.minIndex, node.maxIndex)
       }
@@ -325,8 +381,8 @@ export class App {
 
   private initResizeObserver(): void {
     this.resizeObserver = new ResizeObserver(() => this.handleResize())
-    const grid = document.getElementById('viewer-grid')!
-    this.resizeObserver.observe(grid)
+    this.resizeObserver.observe(this.viewerWorkspace)
+    this.resizeObserver.observe(this.detailPane)
   }
 
   // ============================================================
@@ -374,18 +430,28 @@ export class App {
 
   private applyModel(model: DataModel, filename: string): void {
     this.model = model
+    this.detailModel = null
+    this.geneSelection = null
+    this.sampleSelection = null
+    this.selectedGeneNodeId = null
+    this.selectedSampleNodeId = null
 
     // Show/hide tree panels — update CSS grid track sizes so empty tracks collapse
     const hasGeneTree = model.geneTree !== null
     const hasArrayTree = model.arrayTree !== null
     // Columns: gene-labels | gene-tree (collapses when absent) | heatmap
-    this.viewerGrid.style.gridTemplateColumns =
-      `var(--label-w) ${hasGeneTree ? 'var(--gene-tree-w)' : '0px'} 1fr`
-    // Rows: sample-labels | array-tree (collapses when absent) | heatmap
-    this.viewerGrid.style.gridTemplateRows =
-      `var(--label-h) ${hasArrayTree ? 'var(--array-tree-h)' : '0px'} 1fr`
-    this.geneTreeCell.style.display = hasGeneTree ? '' : 'none'
-    this.arrayTreeCell.style.display = hasArrayTree ? '' : 'none'
+    this.configureGridTracks(
+      this.viewerGrid,
+      this.geneTreeCell,
+      this.arrayTreeCell,
+      hasGeneTree,
+      hasArrayTree,
+    )
+    this.detailPane.classList.add('hidden')
+    this.geneTreeRenderer.setSelectedNodeId(null)
+    this.arrayTreeRenderer.setSelectedNodeId(null)
+    this.detailGeneTreeRenderer.setSelectedNodeId(null)
+    this.detailArrayTreeRenderer.setSelectedNodeId(null)
 
     // Tell the viewport how many items exist so fitToSize() can compute the scale
     this.viewport.genes.setCount(model.genes.length)
@@ -406,7 +472,7 @@ export class App {
 
     // Show viewer
     this.emptyState.classList.add('hidden')
-    this.viewerGrid.classList.remove('hidden')
+    this.viewerWorkspace.classList.remove('hidden')
 
     // Mark that we need to fit once the canvases have non-zero dimensions.
     // handleResize() (called by ResizeObserver or the rAF below) will trigger
@@ -466,19 +532,24 @@ export class App {
   private setGeneSelection(lo: number, hi: number): void {
     this.geneSelection = [lo, hi]
     this.updateSelectionBands()
+    this.updateDetailView()
   }
 
   private setSampleSelection(lo: number, hi: number): void {
     this.sampleSelection = [lo, hi]
     this.updateSelectionBands()
+    this.updateDetailView()
   }
 
   private clearSelection(): void {
     this.geneSelection = null
     this.sampleSelection = null
+    this.selectedGeneNodeId = null
+    this.selectedSampleNodeId = null
     this.geneTreeRenderer.setSelectedNodeId(null)
     this.arrayTreeRenderer.setSelectedNodeId(null)
     this.updateSelectionBands()
+    this.hideDetailView()
   }
 
   private updateSelectionBands(): void {
@@ -503,6 +574,54 @@ export class App {
     } else {
       this.sampleBandEl.classList.add('hidden')
     }
+  }
+
+  private updateDetailView(): void {
+    if (!this.model || (!this.geneSelection && !this.sampleSelection)) {
+      this.hideDetailView()
+      return
+    }
+
+    const detailModel = buildSubsetModel(this.model, this.geneSelection, this.sampleSelection)
+    this.detailModel = detailModel
+
+    this.configureGridTracks(
+      this.detailGrid,
+      this.detailGeneTreeCell,
+      this.detailArrayTreeCell,
+      detailModel.geneTree !== null,
+      detailModel.arrayTree !== null,
+    )
+
+    this.detailViewport.genes.setCount(detailModel.genes.length)
+    this.detailViewport.samples.setCount(detailModel.sampleNames.length)
+    this.detailHeatmapRenderer.setModel(detailModel)
+    this.detailGeneTreeRenderer.setTree(detailModel.geneTree, detailModel.geneTreeCorrMin)
+    this.detailArrayTreeRenderer.setTree(detailModel.arrayTree, detailModel.arrayTreeCorrMin)
+    this.detailGeneTreeRenderer.setSelectedNodeId(
+      this.geneSelection && detailModel.geneTree ? detailModel.geneTree.id : null,
+    )
+    this.detailArrayTreeRenderer.setSelectedNodeId(
+      this.sampleSelection && detailModel.arrayTree ? detailModel.arrayTree.id : null,
+    )
+    this.detailTitle.textContent = this.makeDetailTitle(detailModel)
+    this.detailPane.classList.remove('hidden')
+    this.pendingDetailFit = true
+    requestAnimationFrame(() => this.handleResize())
+  }
+
+  private hideDetailView(): void {
+    this.detailModel = null
+    this.pendingDetailFit = false
+    this.detailPane.classList.add('hidden')
+    this.detailGeneLabelsEl.innerHTML = ''
+    this.detailSampleLabelsEl.innerHTML = ''
+    this.detailGeneTreeRenderer.setSelectedNodeId(null)
+    this.detailArrayTreeRenderer.setSelectedNodeId(null)
+  }
+
+  private makeDetailTitle(model: DataModel): string {
+    return `${model.genes.length} genes x ${model.sampleNames.length} samples`
   }
 
   // Drag-to-select on gene-labels panel (selects row range)
@@ -534,8 +653,15 @@ export class App {
       const count = axis === 'gene' ? this.model.genes.length : this.model.sampleNames.length
       const range = computeSelectionRange(dragStart, current, axisVp, count)
       if (range) {
-        if (axis === 'gene') this.setGeneSelection(range.lo, range.hi)
-        else this.setSampleSelection(range.lo, range.hi)
+        if (axis === 'gene') {
+          this.selectedGeneNodeId = null
+          this.geneTreeRenderer.setSelectedNodeId(null)
+          this.setGeneSelection(range.lo, range.hi)
+        } else {
+          this.selectedSampleNodeId = null
+          this.arrayTreeRenderer.setSelectedNodeId(null)
+          this.setSampleSelection(range.lo, range.hi)
+        }
       }
     })
 
@@ -551,8 +677,15 @@ export class App {
       const count = axis === 'gene' ? this.model.genes.length : this.model.sampleNames.length
       const range = computeSelectionRange(dragStart, end, axisVp, count)
       if (range) {
-        if (axis === 'gene') this.setGeneSelection(range.lo, range.hi)
-        else this.setSampleSelection(range.lo, range.hi)
+        if (axis === 'gene') {
+          this.selectedGeneNodeId = null
+          this.geneTreeRenderer.setSelectedNodeId(null)
+          this.setGeneSelection(range.lo, range.hi)
+        } else {
+          this.selectedSampleNodeId = null
+          this.arrayTreeRenderer.setSelectedNodeId(null)
+          this.setSampleSelection(range.lo, range.hi)
+        }
       }
       dragStart = null
     })
@@ -571,18 +704,24 @@ export class App {
     this.renderSampleLabels()
   }
 
-  private renderGeneLabels(): void {
-    const model = this.model!
-    const gAxis = this.viewport.genes
+  private updateDetailLabels(): void {
+    if (!this.detailModel) return
+
+    this.renderGeneLabelsInto(this.detailModel, this.detailViewport, this.detailGeneLabelsEl)
+    this.renderSampleLabelsInto(this.detailModel, this.detailViewport, this.detailSampleLabelsEl)
+  }
+
+  private renderGeneLabelsInto(model: DataModel, viewport: Viewport, target: HTMLElement): void {
+    const gAxis = viewport.genes
     const cellSize = gAxis.cellSize
 
-    this.geneLabelsEl.innerHTML = ''
+    target.innerHTML = ''
     if (cellSize < 8) return
 
     const first = gAxis.firstVisible
     const last = gAxis.lastVisible
-
     const frag = document.createDocumentFragment()
+
     for (let i = first; i <= last; i++) {
       const gene = model.genes[i]
       if (!gene) continue
@@ -591,25 +730,24 @@ export class App {
       label.className = 'gene-label'
       label.textContent = gene.yorf + (gene.name.trim() ? ' ' + gene.name.trim() : '')
       label.title = label.textContent
-      const centerPx = gAxis.indexToPixel(i + 0.5)
-      label.style.top = `${centerPx}px`
+      label.style.top = `${gAxis.indexToPixel(i + 0.5)}px`
       frag.appendChild(label)
     }
-    this.geneLabelsEl.appendChild(frag)
+
+    target.appendChild(frag)
   }
 
-  private renderSampleLabels(): void {
-    const model = this.model!
-    const sAxis = this.viewport.samples
+  private renderSampleLabelsInto(model: DataModel, viewport: Viewport, target: HTMLElement): void {
+    const sAxis = viewport.samples
     const cellSize = sAxis.cellSize
 
-    this.sampleLabelsEl.innerHTML = ''
+    target.innerHTML = ''
     if (cellSize < 8) return
 
     const first = sAxis.firstVisible
     const last = sAxis.lastVisible
-
     const frag = document.createDocumentFragment()
+
     for (let i = first; i <= last; i++) {
       const name = model.sampleNames[i]
       if (name === undefined) continue
@@ -618,11 +756,19 @@ export class App {
       label.className = 'sample-label'
       label.textContent = name.trim()
       label.title = name.trim()
-      const centerPx = sAxis.indexToPixel(i + 0.5)
-      label.style.left = `${centerPx}px`
+      label.style.left = `${sAxis.indexToPixel(i + 0.5)}px`
       frag.appendChild(label)
     }
-    this.sampleLabelsEl.appendChild(frag)
+
+    target.appendChild(frag)
+  }
+
+  private renderGeneLabels(): void {
+    this.renderGeneLabelsInto(this.model!, this.viewport, this.geneLabelsEl)
+  }
+
+  private renderSampleLabels(): void {
+    this.renderSampleLabelsInto(this.model!, this.viewport, this.sampleLabelsEl)
   }
 
   // ============================================================
@@ -636,6 +782,9 @@ export class App {
     this.resizeCanvas(this.heatmapCanvas)
     this.resizeCanvas(this.geneTreeCanvas)
     this.resizeCanvas(this.arrayTreeCanvas)
+    this.resizeCanvas(this.detailHeatmapCanvas)
+    this.resizeCanvas(this.detailGeneTreeCanvas)
+    this.resizeCanvas(this.detailArrayTreeCanvas)
 
     const heatmapW = this.heatmapCanvas.width
     const heatmapH = this.heatmapCanvas.height
@@ -656,6 +805,24 @@ export class App {
     this.geneTreeRenderer.render()
     this.arrayTreeRenderer.render()
     this.updateLabels()
+
+    if (this.detailModel) {
+      const detailHeatmapW = this.detailHeatmapCanvas.width
+      const detailHeatmapH = this.detailHeatmapCanvas.height
+      if (detailHeatmapW > 0 && detailHeatmapH > 0) {
+        this.detailViewport.genes.setSize(detailHeatmapH)
+        this.detailViewport.samples.setSize(detailHeatmapW)
+        if (this.pendingDetailFit) {
+          this.pendingDetailFit = false
+          this.detailViewport.fitAll()
+        } else {
+          this.detailHeatmapRenderer.render()
+          this.detailGeneTreeRenderer.render()
+          this.detailArrayTreeRenderer.render()
+          this.updateDetailLabels()
+        }
+      }
+    }
   }
 
   private resizeCanvas(canvas: HTMLCanvasElement): void {
@@ -667,5 +834,20 @@ export class App {
 
   private setStatus(msg: string): void {
     this.statusBar.textContent = msg
+  }
+
+  private configureGridTracks(
+    grid: HTMLElement,
+    geneTreeCell: HTMLElement,
+    arrayTreeCell: HTMLElement,
+    hasGeneTree: boolean,
+    hasArrayTree: boolean,
+  ): void {
+    grid.style.gridTemplateColumns =
+      `var(--label-w) ${hasGeneTree ? 'var(--gene-tree-w)' : '0px'} 1fr`
+    grid.style.gridTemplateRows =
+      `var(--label-h) ${hasArrayTree ? 'var(--array-tree-h)' : '0px'} 1fr`
+    geneTreeCell.style.display = hasGeneTree ? '' : 'none'
+    arrayTreeCell.style.display = hasArrayTree ? '' : 'none'
   }
 }
