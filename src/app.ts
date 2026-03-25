@@ -39,6 +39,10 @@ export class App {
   // Pan state
   private isPanning = false
   private panStart = { x: 0, y: 0, gOff: 0, sOff: 0 }
+  private mouseDownPos: { x: number; y: number } | null = null
+
+  // Row selection state (gene index of first click in a range)
+  private selectionAnchor: number | null = null
 
   // ResizeObserver
   private resizeObserver!: ResizeObserver
@@ -208,39 +212,73 @@ export class App {
       this.viewport.notify()
     }, { passive: false })
 
-    // Drag to pan
+    // Drag to pan / click to select row
     canvas.addEventListener('mousedown', (e) => {
       if (e.button !== 0) return
-      this.isPanning = true
+      this.mouseDownPos = { x: e.clientX, y: e.clientY }
+      this.isPanning = false
       this.panStart = {
         x: e.clientX,
         y: e.clientY,
         gOff: this.viewport.genes.offset,
         sOff: this.viewport.samples.offset,
       }
-      canvas.style.cursor = 'grabbing'
     })
 
     window.addEventListener('mousemove', (e) => {
-      if (!this.isPanning) {
+      if (!this.mouseDownPos) {
         this.handleHover(e)
         return
       }
-      const dx = e.clientX - this.panStart.x
-      const dy = e.clientY - this.panStart.y
-      this.viewport.genes.setOffset(
-        this.panStart.gOff - dy / this.viewport.genes.scale,
-      )
-      this.viewport.samples.setOffset(
-        this.panStart.sOff - dx / this.viewport.samples.scale,
-      )
-      this.viewport.notify()
+      const dx = Math.abs(e.clientX - this.mouseDownPos.x)
+      const dy = Math.abs(e.clientY - this.mouseDownPos.y)
+      // Start panning once the mouse moves more than 4px
+      if (!this.isPanning && (dx > 4 || dy > 4)) {
+        this.isPanning = true
+        canvas.style.cursor = 'grabbing'
+      }
+      if (this.isPanning) {
+        const ddx = e.clientX - this.panStart.x
+        const ddy = e.clientY - this.panStart.y
+        this.viewport.genes.setOffset(
+          this.panStart.gOff - ddy / this.viewport.genes.scale,
+        )
+        this.viewport.samples.setOffset(
+          this.panStart.sOff - ddx / this.viewport.samples.scale,
+        )
+        this.viewport.notify()
+      }
     })
 
-    window.addEventListener('mouseup', () => {
-      if (this.isPanning) {
-        this.isPanning = false
-        canvas.style.cursor = 'crosshair'
+    window.addEventListener('mouseup', (e) => {
+      if (!this.mouseDownPos) return
+      const wasPan = this.isPanning
+      this.isPanning = false
+      canvas.style.cursor = 'crosshair'
+      this.mouseDownPos = null
+
+      if (wasPan) return  // drag → don't treat as click
+
+      // Click: select the row under cursor
+      if (!this.model) return
+      const rect = canvas.getBoundingClientRect()
+      const canvasY = e.clientY - rect.top
+      const geneIdx = Math.floor(this.viewport.genes.pixelToIndex(canvasY))
+      if (geneIdx < 0 || geneIdx >= this.model.genes.length) {
+        this.clearSelectionBands()
+        this.selectionAnchor = null
+        return
+      }
+
+      if (e.shiftKey && this.selectionAnchor !== null) {
+        // Extend selection to a range
+        const lo = Math.min(this.selectionAnchor, geneIdx)
+        const hi = Math.max(this.selectionAnchor, geneIdx)
+        this.renderSelectionBand(lo, hi, 'gene')
+      } else {
+        // New single-row selection; anchor for future shift+clicks
+        this.selectionAnchor = geneIdx
+        this.renderSelectionBand(geneIdx, geneIdx, 'gene')
       }
     })
 
@@ -260,6 +298,7 @@ export class App {
       if (node) {
         this.geneTreeRenderer.setSelectedNodeId(node.id)
         this.renderSelectionBand(node.minIndex, node.maxIndex, 'gene')
+        this.selectionAnchor = node.minIndex
       }
     })
 
@@ -275,13 +314,6 @@ export class App {
         this.arrayTreeRenderer.setSelectedNodeId(node.id)
         this.renderSelectionBand(node.minIndex, node.maxIndex, 'sample')
       }
-    })
-
-    // Click heatmap to deselect
-    canvas.addEventListener('click', () => {
-      this.geneTreeRenderer.setSelectedNodeId(null)
-      this.arrayTreeRenderer.setSelectedNodeId(null)
-      this.clearSelectionBands()
     })
   }
 
@@ -337,11 +369,19 @@ export class App {
   private applyModel(model: DataModel, filename: string): void {
     this.model = model
 
-    // Show/hide tree panels
+    // Show/hide tree panels — update CSS grid track sizes so empty tracks collapse
     const hasGeneTree = model.geneTree !== null
     const hasArrayTree = model.arrayTree !== null
+    this.viewerGrid.style.gridTemplateColumns =
+      `${hasGeneTree ? 'var(--gene-tree-w)' : '0px'} 1fr var(--label-w)`
+    this.viewerGrid.style.gridTemplateRows =
+      `${hasArrayTree ? 'var(--array-tree-h)' : '0px'} 1fr var(--label-h)`
     this.geneTreeCell.style.display = hasGeneTree ? '' : 'none'
     this.arrayTreeCell.style.display = hasArrayTree ? '' : 'none'
+
+    // Tell the viewport how many items exist so fitToSize() can compute the scale
+    this.viewport.genes.setCount(model.genes.length)
+    this.viewport.samples.setCount(model.sampleNames.length)
 
     // Auto-set contrast to 4× mean absolute value (matching Java default)
     const autoContrast = Math.max(0.5, model.valueMeanAbsolute * 4)
