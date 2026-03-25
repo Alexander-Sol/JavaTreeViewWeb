@@ -1,0 +1,18 @@
+{
+  "name": "jtv-web",
+  "version": "0.1.0",
+  "description": "Web-based clone of JavaTreeViewer for hierarchical clustering visualization",
+  "scripts": {
+    "dev": "bun run api/index.ts",
+    "build": "bun build src/main.ts --outdir public/dist --target browser --sourcemap=external",
+    "preview": "bun run build && bun run api/index.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "hono": "^4.7.7"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3",
+    "@types/bun": "^1.2.8"
+  }
+}

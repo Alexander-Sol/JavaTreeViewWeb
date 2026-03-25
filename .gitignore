@@ -1,0 +1,6 @@
+JavaTreeViewerInfo/
+node_modules/
+dist/
+public/dist/
+.vercel/
+*.local

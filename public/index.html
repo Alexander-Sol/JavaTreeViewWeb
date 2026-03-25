@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>JavaTreeViewer Web</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header id="toolbar">
+    <div class="toolbar-brand">
+      <span class="brand-name">JTV Web</span>
+    </div>
+
+    <div class="toolbar-section" id="file-controls">
+      <button id="load-btn" class="btn">Load Files</button>
+      <input type="file" id="file-input" multiple accept=".cdt,.gtr,.atr" hidden>
+      <select id="sample-select">
+        <option value="">— Load example dataset —</option>
+      </select>
+    </div>
+
+    <div class="toolbar-section" id="display-controls">
+      <label class="ctrl-label">
+        Color:
+        <select id="color-scheme">
+          <option value="YellowBlue">Yellow / Blue</option>
+          <option value="RedGreen">Red / Green</option>
+        </select>
+      </label>
+
+      <label class="ctrl-label">
+        Contrast:
+        <input type="range" id="contrast-slider" min="0.5" max="6" step="0.1" value="3">
+        <span id="contrast-display">3.0</span>
+      </label>
+
+      <div class="zoom-buttons">
+        <button id="zoom-fit" class="btn btn-sm" title="Fit all data in view">Fit</button>
+        <button id="zoom-in-y" class="btn btn-sm" title="Zoom in rows">R+</button>
+        <button id="zoom-out-y" class="btn btn-sm" title="Zoom out rows">R−</button>
+        <button id="zoom-in-x" class="btn btn-sm" title="Zoom in columns">C+</button>
+        <button id="zoom-out-x" class="btn btn-sm" title="Zoom out columns">C−</button>
+      </div>
+    </div>
+
+    <div id="status-bar"></div>
+  </header>
+
+  <main id="viewer-container" class="drop-zone">
+    <div id="drop-overlay" class="drop-overlay hidden">
+      <div class="drop-message">Drop CDT (+ optional GTR/ATR) files here</div>
+    </div>
+
+    <div id="empty-state" class="empty-state">
+      <div class="empty-icon">⬡</div>
+      <h2>JavaTreeViewer Web</h2>
+      <p>Load a clustering dataset to get started.</p>
+      <p class="hint">
+        Drag and drop a <strong>.cdt</strong> file (with optional <strong>.gtr</strong>/<strong>.atr</strong> tree files),<br>
+        or use the toolbar to load an example dataset.
+      </p>
+    </div>
+
+    <div id="viewer-grid" class="viewer-grid hidden">
+      <!-- Top-left corner: empty -->
+      <div class="cell-corner"></div>
+      <!-- Top: array (column) dendrogram -->
+      <div class="cell-array-tree">
+        <canvas id="array-tree-canvas"></canvas>
+      </div>
+      <!-- Left: gene (row) dendrogram -->
+      <div class="cell-gene-tree">
+        <canvas id="gene-tree-canvas"></canvas>
+      </div>
+      <!-- Center: heatmap -->
+      <div class="cell-heatmap" id="heatmap-cell">
+        <canvas id="heatmap-canvas"></canvas>
+        <div id="gene-labels" class="gene-labels"></div>
+      </div>
+      <!-- Bottom-left: empty -->
+      <div class="cell-empty-bl"></div>
+      <!-- Bottom: sample labels -->
+      <div class="cell-sample-labels">
+        <div id="sample-labels" class="sample-labels"></div>
+      </div>
+    </div>
+  </main>
+
+  <div id="tooltip" class="tooltip hidden"></div>
+
+  <script type="module" src="/dist/main.js"></script>
+</body>
+</html>
