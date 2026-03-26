@@ -13,7 +13,7 @@ import {
 } from './ui/fileLoader'
 import type { DataModel } from './model/types'
 
-const ZOOM_FACTOR = 1.25
+const ZOOM_FACTOR = 1.05
 
 export class App {
   private viewport = new Viewport()
@@ -33,6 +33,7 @@ export class App {
   // UI elements
   private tooltip!: Tooltip
   private statusBar!: HTMLElement
+  private zoomLevelDisplay!: HTMLElement
   private viewerWorkspace!: HTMLElement
   private viewerGrid!: HTMLElement
   private detailPane!: HTMLElement
@@ -112,6 +113,7 @@ export class App {
     this.arrayTreeCell = q<HTMLElement>('.cell-array-tree')
     this.tooltip = new Tooltip(q<HTMLElement>('#tooltip'))
     this.statusBar = q<HTMLElement>('#status-bar')
+    this.zoomLevelDisplay = q<HTMLElement>('#zoom-level-display')
     this.viewerWorkspace = q<HTMLElement>('#viewer-workspace')
     this.viewerGrid = q<HTMLElement>('#viewer-grid')
     this.detailPane = q<HTMLElement>('#detail-pane')
@@ -396,6 +398,8 @@ export class App {
         this.setSampleSelection(node.minIndex, node.maxIndex)
       }
     })
+
+    this.setZoomLevelDisplay()
   }
 
   private initResizeObserver(): void {
@@ -910,6 +914,10 @@ export class App {
 
   private setStatus(msg: string): void {
     this.statusBar.textContent = msg
+  }
+
+  private setZoomLevelDisplay(): void {
+    this.zoomLevelDisplay.textContent = ZOOM_FACTOR.toString();
   }
 
   private configureGridTracks(
