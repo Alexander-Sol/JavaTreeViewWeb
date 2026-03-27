@@ -632,6 +632,7 @@ export class App {
       return
     }
 
+    this.detailSelectedGeneIndex = null
     const detailModel = buildSubsetModel(this.model, this.geneSelection, this.sampleSelection)
     this.detailModel = detailModel
 
