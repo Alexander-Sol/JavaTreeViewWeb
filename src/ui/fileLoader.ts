@@ -81,6 +81,7 @@ export interface SampleDataset {
   name: string
   label: string
   files: string[]
+  proteinFile?: string
 }
 
 export async function fetchSampleList(): Promise<SampleDataset[]> {
@@ -91,7 +92,7 @@ export async function fetchSampleList(): Promise<SampleDataset[]> {
 
 export function getSampleUrls(
   sample: SampleDataset,
-): { cdtUrl: string; gtrUrl?: string; atrUrl?: string } {
+): { cdtUrl: string; gtrUrl?: string; atrUrl?: string; proteinUrl?: string } {
   const base = '/sample-data'
   const cdt = sample.files.find((f) => f.endsWith('.cdt'))
   const gtr = sample.files.find((f) => f.endsWith('.gtr'))
@@ -103,5 +104,6 @@ export function getSampleUrls(
     cdtUrl: `${base}/${cdt}`,
     gtrUrl: gtr ? `${base}/${gtr}` : undefined,
     atrUrl: atr ? `${base}/${atr}` : undefined,
+    proteinUrl: sample.proteinFile ? `${base}/${sample.proteinFile}` : undefined,
   }
 }

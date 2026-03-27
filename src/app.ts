@@ -2,7 +2,7 @@ import { Viewport } from './renderers/viewport'
 import { HeatmapRenderer } from './renderers/heatmapRenderer'
 import { DendrogramRenderer } from './renderers/dendrogramRenderer'
 import { ProteinRenderer } from './renderers/proteinRenderer'
-import { collectProteinSegmentsFromGenes } from './renderers/proteinStructure'
+import { collectProteinSegmentsFromGenes, detectProteinStructureFormat } from './renderers/proteinStructure'
 import { ColorScale, COLOR_SCHEMES } from './color/colorScale'
 import { Tooltip } from './ui/tooltip'
 import { computeSelectionRange } from './ui/selectionManager'
@@ -86,7 +86,7 @@ export class App {
   // fitAll() the first time it sees non-zero canvas dimensions.
   private pendingFit = false
   private pendingDetailFit = false
-  private proteinReady = false
+  private loadedProteinUrl: string | null = null
 
   // ResizeObserver
   private resizeObserver!: ResizeObserver
@@ -443,10 +443,10 @@ export class App {
       const samples = await fetchSampleList()
       const sample = samples.find((s) => s.name === name)
       if (!sample) return
-      const { cdtUrl, gtrUrl, atrUrl } = getSampleUrls(sample)
+      const { cdtUrl, gtrUrl, atrUrl, proteinUrl } = getSampleUrls(sample)
       this.setStatus(`Loading ${sample.label}…`)
       const { model, filename } = await loadFromUrls(cdtUrl, gtrUrl, atrUrl)
-      await this.applyModel(model, filename)
+      await this.applyModel(model, filename, proteinUrl)
     } catch (err) {
       this.setStatus(`Error: ${(err as Error).message}`)
     }
@@ -462,7 +462,7 @@ export class App {
     }
   }
 
-  private async applyModel(model: DataModel, filename: string): Promise<void> {
+  private async applyModel(model: DataModel, filename: string, proteinUrl?: string): Promise<void> {
     this.model = model
     this.detailModel = null
     this.geneSelection = null
@@ -483,7 +483,11 @@ export class App {
     )
     this.detailPane.classList.add('hidden')
     this.annotationPane.classList.add('hidden')
-    this.proteinPane.classList.remove('hidden')
+    if (proteinUrl) {
+      this.proteinPane.classList.remove('hidden')
+    } else {
+      this.proteinPane.classList.add('hidden')
+    }
     this.detailSelectedGeneIndex = null
     this.geneTreeRenderer.setSelectedNodeId(null)
     this.arrayTreeRenderer.setSelectedNodeId(null)
@@ -511,7 +515,7 @@ export class App {
     this.emptyState.classList.add('hidden')
     this.viewerWorkspace.classList.remove('hidden')
 
-    await this.ensureProteinStructure()
+    if (proteinUrl) await this.ensureProteinStructure(proteinUrl)
     await this.updateProteinHighlights()
 
     // Mark that we need to fit once the canvases have non-zero dimensions.
@@ -710,17 +714,20 @@ export class App {
     void this.updateProteinHighlights()
   }
 
-  private async ensureProteinStructure(): Promise<void> {
-    if (this.proteinReady) return
+  private async ensureProteinStructure(url: string): Promise<void> {
+    if (this.loadedProteinUrl === url) return
 
-    await this.proteinRenderer.loadStructureFromUrl('/sample-data/6A9P.pdb', 'pdb', '6A9P')
-    this.proteinReady = true
+    const label = url.split('/').pop()?.replace(/\.[^.]+$/, '') ?? 'structure'
+    const format = detectProteinStructureFormat(url) ?? 'pdb'
+    await this.proteinRenderer.loadStructureFromUrl(url, format, label)
+    this.loadedProteinUrl = url
     this.proteinTitle.textContent = 'Mol* Protein View'
   }
 
   private async updateProteinHighlights(): Promise<void> {
-    if (!this.proteinReady) {
-      this.proteinMessage.textContent = 'Loading 6A9P structure…'
+    if (this.proteinPane.classList.contains('hidden')) return
+    if (this.loadedProteinUrl === null) {
+      this.proteinMessage.textContent = 'Loading structure…'
       return
     }
 

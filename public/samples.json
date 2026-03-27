@@ -1,5 +1,14 @@
 [
   {
+    "name": "gfap1d",
+    "label": "GFAP Peptides — ALS vs Control (138 peptides × 80 samples)",
+    "files": [
+      "GFAP_1D/PeptideHeatmapNoCols.cdt",
+      "GFAP_1D/PeptideHeatmapNoCols.gtr"
+    ],
+    "proteinFile": "6A9P.pdb"
+  },
+  {
     "name": "spellman",
     "label": "Spellman Yeast Cell Cycle (95 genes x 59 samples)",
     "files": [
