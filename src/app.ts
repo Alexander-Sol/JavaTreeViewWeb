@@ -481,12 +481,15 @@ export class App {
       hasGeneTree,
       hasArrayTree,
     )
+    this.viewerWorkspace.classList.remove('show-detail')
     this.detailPane.classList.add('hidden')
     this.annotationPane.classList.add('hidden')
     if (proteinUrl) {
       this.proteinPane.classList.remove('hidden')
+      this.viewerWorkspace.classList.add('has-protein')
     } else {
       this.proteinPane.classList.add('hidden')
+      this.viewerWorkspace.classList.remove('has-protein')
     }
     this.detailSelectedGeneIndex = null
     this.geneTreeRenderer.setSelectedNodeId(null)
@@ -656,6 +659,7 @@ export class App {
     this.annotationTitle.textContent = `${detailModel.genes.length} genes`
     this.renderAnnotationList(detailModel)
     this.annotationPane.classList.remove('hidden')
+    this.viewerWorkspace.classList.add('show-detail')
     this.pendingDetailFit = true
     requestAnimationFrame(() => this.handleResize())
   }
@@ -665,6 +669,7 @@ export class App {
     this.pendingDetailFit = false
     this.detailPane.classList.add('hidden')
     this.annotationPane.classList.add('hidden')
+    this.viewerWorkspace.classList.remove('show-detail')
     this.detailSelectedGeneIndex = null
     this.detailGeneLabelsEl.innerHTML = ''
     this.detailSampleLabelsEl.innerHTML = ''

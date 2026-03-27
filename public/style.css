@@ -142,20 +142,41 @@ input[type="range"] {
 
 .viewer-workspace {
   display: grid;
-  grid-template-columns: minmax(420px, 1fr) minmax(340px, 0.9fr);
   gap: var(--viewer-gap);
   width: 100%;
   height: 100%;
   padding: 12px;
+  /* Default: only the main heatmap */
+  grid-template-columns: 1fr;
+  grid-template-rows: 1fr;
+  grid-template-areas: "main";
 }
 
-.viewer-sidebar {
-  min-width: 0;
-  min-height: 0;
-  display: grid;
-  grid-template-rows: minmax(220px, 1fr) minmax(260px, 1fr) minmax(180px, 0.8fr);
-  gap: var(--viewer-gap);
+/* Selection open, no protein */
+.viewer-workspace.show-detail {
+  grid-template-columns: 2fr 2fr 1fr;
+  grid-template-areas: "main detail annotation";
 }
+
+/* Protein visible, no selection */
+.viewer-workspace.has-protein {
+  grid-template-columns: 2fr 2fr 1fr;
+  grid-template-areas: "main protein protein";
+}
+
+/* Protein visible + selection open */
+.viewer-workspace.has-protein.show-detail {
+  grid-template-columns: 2fr 2fr 1fr;
+  grid-template-rows: 1fr 1fr;
+  grid-template-areas:
+    "main protein  protein"
+    "main detail   annotation";
+}
+
+.viewer-pane-primary { grid-area: main; }
+#protein-pane        { grid-area: protein; }
+#detail-pane         { grid-area: detail; }
+#annotation-pane     { grid-area: annotation; }
 
 .viewer-pane {
   min-width: 0;
@@ -368,13 +389,17 @@ input[type="range"] {
 .cell-sample-labels { grid-area: sample-labels; overflow: hidden; position: relative; }
 
 @media (max-width: 1100px) {
-  .viewer-workspace {
+  .viewer-workspace,
+  .viewer-workspace.show-detail,
+  .viewer-workspace.has-protein,
+  .viewer-workspace.has-protein.show-detail {
     grid-template-columns: 1fr;
-    grid-template-rows: minmax(320px, 1fr) minmax(620px, 1.3fr);
-  }
-
-  .viewer-sidebar {
-    grid-template-rows: minmax(240px, 0.9fr) minmax(260px, 1fr) minmax(180px, 0.7fr);
+    grid-template-rows: minmax(320px, 1fr) minmax(260px, 0.8fr) minmax(260px, 0.8fr) minmax(180px, 0.6fr);
+    grid-template-areas:
+      "main"
+      "protein"
+      "detail"
+      "annotation";
   }
 
   .protein-pane-header {
