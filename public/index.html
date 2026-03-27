@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>JavaTreeViewer Web</title>
+  <link rel="stylesheet" href="/dist/molstar.css">
   <link rel="stylesheet" href="/style.css">
 </head>
 <body>
@@ -92,47 +93,60 @@
         </div>
       </section>
 
-      <aside id="detail-pane" class="viewer-pane detail-pane hidden">
-        <div class="detail-pane-header">
-          <div>
-            <div class="detail-pane-kicker">Subset Viewer</div>
-            <div id="detail-title" class="detail-pane-title">Selected segment</div>
+      <div class="viewer-sidebar">
+        <aside id="detail-pane" class="viewer-pane detail-pane hidden">
+          <div class="detail-pane-header">
+            <div>
+              <div class="detail-pane-kicker">Subset Viewer</div>
+              <div id="detail-title" class="detail-pane-title">Selected segment</div>
+            </div>
+            <button id="detail-close" class="btn btn-sm" type="button">Close</button>
           </div>
-          <button id="detail-close" class="btn btn-sm" type="button">Close</button>
-        </div>
 
-        <div id="detail-grid" class="viewer-grid detail-grid">
-          <div class="cell-corner"></div>
-          <div class="cell-sample-labels">
-            <div id="detail-sample-labels" class="sample-labels"></div>
-          </div>
-          <div class="cell-corner-tr"></div>
+          <div id="detail-grid" class="viewer-grid detail-grid">
+            <div class="cell-corner"></div>
+            <div class="cell-sample-labels">
+              <div id="detail-sample-labels" class="sample-labels"></div>
+            </div>
+            <div class="cell-corner-tr"></div>
 
-          <div class="cell-corner2"></div>
-          <div class="cell-array-tree" id="detail-array-tree-cell">
-            <canvas id="detail-array-tree-canvas"></canvas>
-          </div>
-          <div class="cell-corner-tr2"></div>
+            <div class="cell-corner2"></div>
+            <div class="cell-array-tree" id="detail-array-tree-cell">
+              <canvas id="detail-array-tree-canvas"></canvas>
+            </div>
+            <div class="cell-corner-tr2"></div>
 
-          <div class="cell-gene-labels" id="detail-gene-labels-cell">
-            <div id="detail-gene-labels" class="gene-labels"></div>
+            <div class="cell-gene-labels" id="detail-gene-labels-cell">
+              <div id="detail-gene-labels" class="gene-labels"></div>
+            </div>
+            <div class="cell-gene-tree" id="detail-gene-tree-cell">
+              <canvas id="detail-gene-tree-canvas"></canvas>
+            </div>
+            <div class="cell-heatmap" id="detail-heatmap-cell">
+              <canvas id="detail-heatmap-canvas"></canvas>
+            </div>
           </div>
-          <div class="cell-gene-tree" id="detail-gene-tree-cell">
-            <canvas id="detail-gene-tree-canvas"></canvas>
-          </div>
-          <div class="cell-heatmap" id="detail-heatmap-cell">
-            <canvas id="detail-heatmap-canvas"></canvas>
-          </div>
-        </div>
-      </aside>
+        </aside>
 
-      <aside id="annotation-pane" class="viewer-pane annotation-pane hidden">
-        <div class="annotation-pane-header">
-          <div class="detail-pane-kicker">Subset Genes</div>
-          <div id="annotation-title" class="detail-pane-title">Annotations</div>
-        </div>
-        <div id="annotation-list" class="annotation-list"></div>
-      </aside>
+        <aside id="protein-pane" class="viewer-pane protein-pane hidden">
+          <div class="annotation-pane-header protein-pane-header">
+            <div>
+              <div class="detail-pane-kicker">Structure</div>
+              <div id="protein-title" class="detail-pane-title">Mol* Protein View</div>
+            </div>
+            <div id="protein-message" class="protein-message">Select peptide-bearing rows or clusters to highlight residues.</div>
+          </div>
+          <div id="protein-viewport" class="protein-viewport"></div>
+        </aside>
+
+        <aside id="annotation-pane" class="viewer-pane annotation-pane hidden">
+          <div class="annotation-pane-header">
+            <div class="detail-pane-kicker">Subset Genes</div>
+            <div id="annotation-title" class="detail-pane-title">Annotations</div>
+          </div>
+          <div id="annotation-list" class="annotation-list"></div>
+        </aside>
+      </div>
     </div>
   </main>
 

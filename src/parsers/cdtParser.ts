@@ -30,15 +30,7 @@ export function parseCdt(text: string): CdtData {
 
   const hasGID = colIndex.has('GID')
 
-  // The first column that is not a known metadata column is the start of data
-  let dataStartCol = 0
-  for (let i = 0; i < headerTokens.length; i++) {
-    const h = (headerTokens[i] ?? '').toUpperCase()
-    if (!META_COLS.has(h)) {
-      dataStartCol = i
-      break
-    }
-  }
+  const dataStartCol = detectDataStartCol(lines, headerTokens)
 
   // Sample names: everything from dataStartCol onward in the header row
   const sampleNames = headerTokens.slice(dataStartCol).map((s) => s.trim())
@@ -64,7 +56,7 @@ export function parseCdt(text: string): CdtData {
     if (SKIP_ROW_IDS.has(firstToken)) continue
 
     // Data row
-    const gene = parseGeneRow(tokens, colIndex, dataStartCol, hasGID)
+    const gene = parseGeneRow(headerTokens, tokens, colIndex, dataStartCol, hasGID)
     genes.push(gene)
   }
 
@@ -111,6 +103,7 @@ function buildColIndex(headers: string[]): Map<string, number> {
 }
 
 function parseGeneRow(
+  headers: string[],
   tokens: string[],
   colIndex: Map<string, number>,
   dataStartCol: number,
@@ -127,6 +120,14 @@ function parseGeneRow(
   const gweightStr = get('GWEIGHT')
   const gweight = gweightStr !== '' ? parseFloat(gweightStr) : 1.0
 
+  const metadata: Record<string, string> = {}
+  for (let i = 0; i < dataStartCol; i++) {
+    const rawHeader = (headers[i] ?? '').trim()
+    const header = rawHeader.toUpperCase()
+    if (!rawHeader || META_COLS.has(header)) continue
+    metadata[rawHeader] = (tokens[i] ?? '').trim()
+  }
+
   const rawValues = tokens.slice(dataStartCol)
   const values: (number | null)[] = rawValues.map((v) => {
     const s = v.trim()
@@ -135,5 +136,27 @@ function parseGeneRow(
     return isNaN(n) ? null : n
   })
 
-  return { gid, yorf, name, gweight, values }
+  return { gid, yorf, name, gweight, metadata, values }
+}
+
+function detectDataStartCol(lines: string[], headerTokens: string[]): number {
+  for (let li = 1; li < lines.length; li++) {
+    const line = lines[li]
+    if (line === undefined || line.trim() === '') continue
+
+    const tokens = splitLine(line)
+    const rowId = (tokens[0] ?? '').trim().toUpperCase()
+    if (rowId !== 'AID' && rowId !== 'EWEIGHT') continue
+
+    for (let i = 1; i < tokens.length; i++) {
+      if ((tokens[i] ?? '').trim() !== '') return i
+    }
+  }
+
+  for (let i = 0; i < headerTokens.length; i++) {
+    const h = (headerTokens[i] ?? '').toUpperCase()
+    if (!META_COLS.has(h)) return i
+  }
+
+  return headerTokens.length
 }

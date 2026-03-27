@@ -4,7 +4,7 @@
   "description": "Web-based clone of JavaTreeViewer for hierarchical clustering visualization",
   "scripts": {
     "dev": "bun run build && python3 -m http.server 3000 -d public",
-    "build": "bun build src/main.ts --outdir public/dist --target browser --sourcemap=external",
+    "build": "bun build src/main.ts --outdir public/dist --target browser --sourcemap=external && cp node_modules/molstar/build/viewer/molstar.css public/dist/molstar.css",
     "preview": "bun run build && python3 -m http.server 3000 -d public",
     "typecheck": "tsc --noEmit",
     "test": "bun test"
@@ -12,5 +12,8 @@
   "devDependencies": {
     "typescript": "^5.8.3",
     "@types/bun": "^1.2.8"
+  },
+  "dependencies": {
+    "molstar": "^5.7.0"
   }
 }
