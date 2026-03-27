@@ -111,13 +111,13 @@ function parseGeneRow(
 ): GeneRow {
   const get = (key: string): string => {
     const idx = colIndex.get(key)
-    return idx !== undefined ? (tokens[idx] ?? '').trim() : ''
+    return idx !== undefined ? (tokens[idx] ?? '') : ''
   }
 
-  const gid = hasGID ? get('GID') || null : null
-  const yorf = get('YORF')
+  const gid = hasGID ? get('GID').trim() || null : null
+  const yorf = get('YORF').trim()
   const { name, annotation } = parseGeneName(get('NAME'))
-  const gweightStr = get('GWEIGHT')
+  const gweightStr = get('GWEIGHT').trim()
   const gweight = gweightStr !== '' ? parseFloat(gweightStr) : 1.0
 
   const metadata: Record<string, string> = {}
@@ -141,16 +141,15 @@ function parseGeneRow(
 
 function parseGeneName(nameString:string): {name: string | null, annotation: string | null} {
   let geneName: string | null = null
-  let annotation: string | null = nameString
+  let annotation: string | null = nameString.trim() || null // If it starts with whitespace, it's probably missing the name and just has annotation
+  if (/^\s/.test(nameString)) return { name: null, annotation } // If it starts with whitespace, it's probably missing the name and just has annotation
   if (/\t| {3,}/.test(nameString)) { // If we've got a long stretch of spaces or a tab, it's probably separating name from annotation
-    if (/^\s/.test(nameString)){ // If it starts with whitespace, it's probably missing the name and just has annotation
-       annotation = nameString.trim()
-    }
     const endIndex = nameString.search(/\t|\s/)
     geneName = nameString.slice(0, endIndex).trim() || null
     annotation = nameString.slice(endIndex).trim() || null
   } else {
     geneName = nameString.trim() || null // TODO: Will need to handle peptide mod parsing here later
+    annotation = null
   }
   return { name: geneName, annotation: annotation }
 }

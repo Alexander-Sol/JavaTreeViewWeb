@@ -18,8 +18,10 @@ export interface GeneRow {
   gid: string | null
   /** Primary gene identifier, e.g. "YKR091W" */
   yorf: string
-  /** Gene annotation / common name */
-  name: string
+  /** Common gene name, e.g. "RGR1" — may be empty string if not present in CDT */
+  name: string | null
+  /** Gene annotation, e.g. "regulator of G-protein signaling" or more commonly, "biological_process unknown" */
+  annotation: string | null
   /** Expression weight (usually 1.0) */
   gweight: number
   /** Additional non-expression metadata columns preserved from the CDT row */

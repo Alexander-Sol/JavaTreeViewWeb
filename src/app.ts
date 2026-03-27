@@ -701,7 +701,7 @@ export class App {
 
       const nameEl = document.createElement('div')
       nameEl.className = 'annotation-name'
-      nameEl.textContent = gene.name.trim() || '(no annotation)'
+      nameEl.textContent = gene.name || '(no annotation)'
 
       item.appendChild(geneEl)
       item.appendChild(nameEl)
@@ -889,8 +889,8 @@ export class App {
 
       const label = document.createElement('div')
       label.className = 'gene-label'
-      label.textContent = gene.yorf + (gene.name.trim() ? ' ' + gene.name.trim() : '')
-      label.title = label.textContent
+      label.textContent = gene.name ?? gene.yorf
+      label.title = gene.annotation ? gene.annotation : label.textContent
       label.style.top = `${gAxis.indexToPixel(i + 0.5)}px`
       frag.appendChild(label)
     }
