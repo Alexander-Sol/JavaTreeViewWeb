@@ -8,6 +8,7 @@ function makeGene(id: string): GeneRow {
     yorf: id,
     name: id,
     gweight: 1,
+    metadata: {},
     values: [],
   }
 }

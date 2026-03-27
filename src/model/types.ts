@@ -22,6 +22,8 @@ export interface GeneRow {
   name: string
   /** Expression weight (usually 1.0) */
   gweight: number
+  /** Additional non-expression metadata columns preserved from the CDT row */
+  metadata: Record<string, string>
   /** Log2 expression values, null = missing data */
   values: (number | null)[]
 }

@@ -1,6 +1,8 @@
 import { Viewport } from './renderers/viewport'
 import { HeatmapRenderer } from './renderers/heatmapRenderer'
 import { DendrogramRenderer } from './renderers/dendrogramRenderer'
+import { ProteinRenderer } from './renderers/proteinRenderer'
+import { collectProteinSegmentsFromGenes } from './renderers/proteinStructure'
 import { ColorScale, COLOR_SCHEMES } from './color/colorScale'
 import { Tooltip } from './ui/tooltip'
 import { computeSelectionRange } from './ui/selectionManager'
@@ -29,6 +31,7 @@ export class App {
   private detailHeatmapRenderer!: HeatmapRenderer
   private detailGeneTreeRenderer!: DendrogramRenderer
   private detailArrayTreeRenderer!: DendrogramRenderer
+  private proteinRenderer!: ProteinRenderer
 
   // UI elements
   private tooltip!: Tooltip
@@ -37,6 +40,10 @@ export class App {
   private viewerGrid!: HTMLElement
   private detailPane!: HTMLElement
   private annotationPane!: HTMLElement
+  private proteinPane!: HTMLElement
+  private proteinViewportEl!: HTMLElement
+  private proteinTitle!: HTMLElement
+  private proteinMessage!: HTMLElement
   private detailGrid!: HTMLElement
   private detailTitle!: HTMLElement
   private annotationTitle!: HTMLElement
@@ -79,6 +86,7 @@ export class App {
   // fitAll() the first time it sees non-zero canvas dimensions.
   private pendingFit = false
   private pendingDetailFit = false
+  private proteinReady = false
 
   // ResizeObserver
   private resizeObserver!: ResizeObserver
@@ -116,6 +124,10 @@ export class App {
     this.viewerGrid = q<HTMLElement>('#viewer-grid')
     this.detailPane = q<HTMLElement>('#detail-pane')
     this.annotationPane = q<HTMLElement>('#annotation-pane')
+    this.proteinPane = q<HTMLElement>('#protein-pane')
+    this.proteinViewportEl = q<HTMLElement>('#protein-viewport')
+    this.proteinTitle = q<HTMLElement>('#protein-title')
+    this.proteinMessage = q<HTMLElement>('#protein-message')
     this.detailGrid = q<HTMLElement>('#detail-grid')
     this.detailTitle = q<HTMLElement>('#detail-title')
     this.annotationTitle = q<HTMLElement>('#annotation-title')
@@ -184,6 +196,7 @@ export class App {
       'top',
       this.detailViewport,
     )
+    this.proteinRenderer = new ProteinRenderer(this.proteinViewportEl)
 
     // Labels and selection bands update whenever viewport changes
     this.viewport.onChange(() => {
@@ -403,6 +416,7 @@ export class App {
     this.resizeObserver.observe(this.viewerWorkspace)
     this.resizeObserver.observe(this.detailPane)
     this.resizeObserver.observe(this.annotationPane)
+    this.resizeObserver.observe(this.proteinPane)
   }
 
   // ============================================================
@@ -432,7 +446,7 @@ export class App {
       const { cdtUrl, gtrUrl, atrUrl } = getSampleUrls(sample)
       this.setStatus(`Loading ${sample.label}…`)
       const { model, filename } = await loadFromUrls(cdtUrl, gtrUrl, atrUrl)
-      this.applyModel(model, filename)
+      await this.applyModel(model, filename)
     } catch (err) {
       this.setStatus(`Error: ${(err as Error).message}`)
     }
@@ -442,13 +456,13 @@ export class App {
     try {
       this.setStatus('Loading…')
       const { model, filename } = await loadFromFiles(files)
-      this.applyModel(model, filename)
+      await this.applyModel(model, filename)
     } catch (err) {
       this.setStatus(`Error: ${(err as Error).message}`)
     }
   }
 
-  private applyModel(model: DataModel, filename: string): void {
+  private async applyModel(model: DataModel, filename: string): Promise<void> {
     this.model = model
     this.detailModel = null
     this.geneSelection = null
@@ -469,6 +483,7 @@ export class App {
     )
     this.detailPane.classList.add('hidden')
     this.annotationPane.classList.add('hidden')
+    this.proteinPane.classList.remove('hidden')
     this.detailSelectedGeneIndex = null
     this.geneTreeRenderer.setSelectedNodeId(null)
     this.arrayTreeRenderer.setSelectedNodeId(null)
@@ -495,6 +510,9 @@ export class App {
     // Show viewer
     this.emptyState.classList.add('hidden')
     this.viewerWorkspace.classList.remove('hidden')
+
+    await this.ensureProteinStructure()
+    await this.updateProteinHighlights()
 
     // Mark that we need to fit once the canvases have non-zero dimensions.
     // handleResize() (called by ResizeObserver or the rAF below) will trigger
@@ -555,12 +573,14 @@ export class App {
     this.geneSelection = [lo, hi]
     this.updateSelectionBands()
     this.updateDetailView()
+    void this.updateProteinHighlights()
   }
 
   private setSampleSelection(lo: number, hi: number): void {
     this.sampleSelection = [lo, hi]
     this.updateSelectionBands()
     this.updateDetailView()
+    void this.updateProteinHighlights()
   }
 
   private clearSelection(): void {
@@ -572,6 +592,7 @@ export class App {
     this.arrayTreeRenderer.setSelectedNodeId(null)
     this.updateSelectionBands()
     this.hideDetailView()
+    void this.updateProteinHighlights()
   }
 
   private updateSelectionBands(): void {
@@ -647,6 +668,7 @@ export class App {
     this.detailGeneTreeRenderer.setSelectedNodeId(null)
     this.detailArrayTreeRenderer.setSelectedNodeId(null)
     this.updateDetailSelectionBand()
+    void this.updateProteinHighlights()
   }
 
   private makeDetailTitle(model: DataModel): string {
@@ -685,6 +707,57 @@ export class App {
     this.detailSelectedGeneIndex = index
     this.renderAnnotationList(this.detailModel)
     this.updateDetailSelectionBand()
+    void this.updateProteinHighlights()
+  }
+
+  private async ensureProteinStructure(): Promise<void> {
+    if (this.proteinReady) return
+
+    await this.proteinRenderer.loadStructureFromUrl('/sample-data/6A9P.pdb', 'pdb', '6A9P')
+    this.proteinReady = true
+    this.proteinTitle.textContent = 'Mol* Protein View'
+  }
+
+  private async updateProteinHighlights(): Promise<void> {
+    if (!this.proteinReady) {
+      this.proteinMessage.textContent = 'Loading 6A9P structure…'
+      return
+    }
+
+    const genes = this.getProteinHighlightGenes()
+    const segments = collectProteinSegmentsFromGenes(genes)
+    await this.proteinRenderer.setHighlightedSegments(segments)
+
+    if (this.detailSelectedGeneIndex !== null && this.detailModel) {
+      this.proteinMessage.textContent = segments.length > 0
+        ? this.describeProteinSegments(segments)
+        : 'Selected row has no peptide residue metadata.'
+      return
+    }
+
+    if (this.geneSelection && this.detailModel) {
+      this.proteinMessage.textContent = segments.length > 0
+        ? this.describeProteinSegments(segments)
+        : 'Selected cluster has no peptide residue metadata.'
+      return
+    }
+
+    this.proteinMessage.textContent = 'Select peptide-bearing rows or clusters to highlight residues.'
+  }
+
+  private getProteinHighlightGenes(): DataModel['genes'] {
+    if (this.detailSelectedGeneIndex !== null && this.detailModel) {
+      const gene = this.detailModel.genes[this.detailSelectedGeneIndex]
+      return gene ? [gene] : []
+    }
+
+    if (this.geneSelection && this.detailModel) return this.detailModel.genes
+    return []
+  }
+
+  private describeProteinSegments(segments: ReturnType<typeof collectProteinSegmentsFromGenes>): string {
+    const residueCount = segments.reduce((sum, segment) => sum + (segment.end - segment.start + 1), 0)
+    return `${segments.length} segment${segments.length === 1 ? '' : 's'} highlighted across ${residueCount} residues.`
   }
 
   private updateDetailSelectionBand(): void {
