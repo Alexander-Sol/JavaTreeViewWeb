@@ -15,5 +15,9 @@
   the residues present in the loaded .pdb file, show a small warning message in the lower-right corner
   of the screen when the user clicks that gene in the annotation list.
 
+- [ ] **Reverse protein-to-heatmap selection** — Clicking a residue in the Mol* protein view should
+  highlight all peptides in the heatmap that contain that residue (i.e. whose Start–End range
+  covers the clicked residue position).
+
 - [ ] **Refactor app.ts** — Split the ~1000-line `src/app.ts` into smaller, focused modules.
   Determine best TypeScript file/module structure for this kind of app.

@@ -97,7 +97,7 @@ export class ProteinRenderer {
 function buildSegmentQuery(segments: ProteinSegment[]) {
   return StructureSelectionQuery(
     'Selected peptide segments',
-    MS.struct.modifier.union(segments.map(createSegmentExpression)),
+    MS.struct.combinator.merge(segments.map(createSegmentExpression)),
   )
 }
 
