@@ -1,4 +1,4 @@
-import type { GeneRow } from '../model/types'
+import type { GeneRow, PeptideRow } from '../model/types'
 import { getGeneModificationColor } from '../ui/modColors'
 
 export type ProteinStructureFormat = 'pdb' | 'pdbxml'
@@ -52,16 +52,18 @@ export function prepareProteinStructureText(
 export function normalizeProteinSegments(segments: ProteinSegment[]): ProteinSegment[] {
   const cleaned: ProteinSegment[] = []
   for (const segment of segments) {
-      const start = Math.trunc(segment.start)
-      const end = Math.trunc(segment.end)
-      if (!Number.isFinite(start) || !Number.isFinite(end)) continue
+    const start = Math.trunc(segment.start)
+    const end = Math.trunc(segment.end)
+    if (!Number.isFinite(start) || !Number.isFinite(end)) continue
 
-      cleaned.push({
-        start: Math.min(start, end),
-        end: Math.max(start, end),
-        chainId: segment.chainId?.trim() || undefined,
-        sequenceIdKind: segment.sequenceIdKind ?? 'auth',
-      })
+    cleaned.push({
+      start: Math.min(start, end),
+      end: Math.max(start, end),
+      chainId: segment.chainId?.trim() || undefined,
+      sequenceIdKind: segment.sequenceIdKind ?? 'auth',
+      color: segment.color,
+      label: segment.label,
+    })
   }
 
   cleaned.sort(compareSegments)
@@ -88,42 +90,39 @@ export function collectProteinSegmentsFromGenes(genes: GeneRow[]): ProteinSegmen
   const segments: ProteinSegment[] = []
 
   for (const gene of genes) {
+    if (!isPeptideRow(gene)) continue
     const metadata = normalizeMetadata(gene.metadata)
     const chainId = getMetadataValue(metadata, CHAIN_KEYS) || undefined
-    const sequenceIdKind: ProteinSequenceIdKind =
-      getMetadataValue(metadata, LABEL_SEQ_HINT_KEYS) ? 'label' : 'auth'
-
-      const directStart = parseInteger(getMetadataValue(metadata, START_KEYS))
-      const directEnd = parseInteger(getMetadataValue(metadata, END_KEYS))
-      if (directStart !== null && directEnd !== null) {
+    const position = extractProteinPosition(gene)
+    if (position) {
       segments.push({
-        start: directStart,
-        end: directEnd,
+        start: position.start,
+        end: position.end,
         chainId,
-        sequenceIdKind,
+        sequenceIdKind: position.sequenceIdKind,
         color: getGeneModificationColor(gene),
         label: gene.modifications.displayLabel,
       })
-      continue
     }
-
-    const rangeValue = getMetadataValue(metadata, RANGE_KEYS)
-    if (!rangeValue) continue
-
-    const parsedRange = parseRange(rangeValue)
-    if (!parsedRange) continue
-
-    segments.push({
-      start: parsedRange.start,
-      end: parsedRange.end,
-      chainId,
-      sequenceIdKind,
-      color: getGeneModificationColor(gene),
-      label: gene.modifications.displayLabel,
-    })
   }
 
   return normalizeProteinSegments(segments)
+}
+
+export function extractProteinPosition(gene: GeneRow): { start: number; end: number; sequenceIdKind: ProteinSequenceIdKind } | null {
+  if (isPeptideRow(gene) && gene.startPosition !== null && gene.endPosition !== null) {
+    const metadata = normalizeMetadata(gene.metadata)
+    const sequenceIdKind: ProteinSequenceIdKind =
+      getMetadataValue(metadata, LABEL_SEQ_HINT_KEYS) ? 'label' : 'auth'
+    return { start: gene.startPosition, end: gene.endPosition, sequenceIdKind }
+  }
+
+  const metadata = normalizeMetadata(gene.metadata)
+  const sequenceIdKind: ProteinSequenceIdKind =
+    getMetadataValue(metadata, LABEL_SEQ_HINT_KEYS) ? 'label' : 'auth'
+  const siteRange = isPeptideRow(gene) ? parsePositionFromModificationSites(gene) : null
+  if (siteRange) return { ...siteRange, sequenceIdKind }
+  return null
 }
 
 export function pdbmlToPdb(xmlText: string): string {
@@ -202,15 +201,21 @@ function parseInteger(value: string | null | undefined): number | null {
   return Number.isFinite(parsed) ? parsed : null
 }
 
-function parseRange(value: string): { start: number; end: number } | null {
-  const match = value.match(/(-?\d+)\s*(?:-|\.\.|:)\s*(-?\d+)/)
-  if (!match) return null
-
-  const start = Number.parseInt(match[1] ?? '', 10)
-  const end = Number.parseInt(match[2] ?? '', 10)
-  if (!Number.isFinite(start) || !Number.isFinite(end)) return null
-
+function parsePositionFromModificationSites(
+  gene: Pick<PeptideRow, 'modifications'> | undefined,
+): { start: number; end: number } | null {
+  if (!gene) return null
+  const positions = gene.modifications.modifications
+    .map((mod) => mod.position)
+    .filter((value): value is number => value !== null)
+  if (positions.length === 0) return null
+  const start = Math.min(...positions)
+  const end = Math.max(...positions)
   return { start, end }
+}
+
+function isPeptideRow(gene: GeneRow): gene is PeptideRow {
+  return 'startPosition' in gene && 'endPosition' in gene
 }
 
 function compareSegments(a: ProteinSegment, b: ProteinSegment): number {

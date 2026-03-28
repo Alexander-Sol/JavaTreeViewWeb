@@ -1,4 +1,4 @@
-import type { CdtData, DataModel, GeneRow, TreeData, TreeNode, TreeNodeRecord } from './types'
+import type { CdtData, DataModel, GeneRow, PeptideRow, TreeData, TreeNode, TreeNodeRecord } from './types'
 
 /**
  * Build the full DataModel from parsed CDT data and optional tree files.
@@ -133,10 +133,15 @@ export function buildSubsetModel(
 function collectModificationCategories(genes: GeneRow[]): string[] {
   const categories = new Set<string>()
   for (const gene of genes) {
+    if (!isPeptideRow(gene)) continue
     categories.add(gene.modifications.category)
     for (const mod of gene.modifications.modifications) categories.add(mod.normalizedName)
   }
   return Array.from(categories).sort((a, b) => a.localeCompare(b))
+}
+
+function isPeptideRow(gene: GeneRow): gene is PeptideRow {
+  return 'baseSequence' in gene && 'modifications' in gene && 'startPosition' in gene && 'endPosition' in gene
 }
 
 // ============================================================

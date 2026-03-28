@@ -1,4 +1,4 @@
-import type { GeneRow } from '../model/types'
+import type { PeptideRow } from '../model/types'
 
 const MOD_COLOR_PALETTE = [
   '#f4c145',
@@ -11,7 +11,7 @@ const MOD_COLOR_PALETTE = [
   '#e5c494',
 ]
 
-export function getGeneModificationColor(gene: GeneRow): string {
+export function getGeneModificationColor(gene: PeptideRow): string {
   const key = gene.modifications.modifications[0]?.normalizedName ?? gene.modifications.category
   let hash = 0
   for (let i = 0; i < key.length; i++) hash = (hash * 31 + key.charCodeAt(i)) >>> 0

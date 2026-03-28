@@ -2,7 +2,7 @@ import { Viewport } from './renderers/viewport'
 import { HeatmapRenderer } from './renderers/heatmapRenderer'
 import { DendrogramRenderer } from './renderers/dendrogramRenderer'
 import { ProteinRenderer } from './renderers/proteinRenderer'
-import { collectProteinSegmentsFromGenes, detectProteinStructureFormat } from './renderers/proteinStructure'
+import { collectProteinSegmentsFromGenes, detectProteinStructureFormat, extractProteinPosition } from './renderers/proteinStructure'
 import { ColorScale, COLOR_SCHEMES } from './color/colorScale'
 import { Tooltip } from './ui/tooltip'
 import { computeSelectionRange } from './ui/selectionManager'
@@ -14,7 +14,7 @@ import {
   fetchSampleList,
   getSampleUrls,
 } from './ui/fileLoader'
-import type { DataModel } from './model/types'
+import type { DataModel, PeptideRow } from './model/types'
 
 const ZOOM_FACTOR = 1.25
 const MOD_FILTER_ALL = '__ALL__'
@@ -710,9 +710,11 @@ export class App {
     model.genes.forEach((gene, index) => {
       const item = document.createElement('div')
       item.className = 'annotation-item'
-      const modColor = getGeneModificationColor(gene)
-      item.classList.add('has-mod-color')
-      item.style.setProperty('--annotation-mod-color', modColor)
+      if (this.isPeptideRow(gene)) {
+        const modColor = getGeneModificationColor(gene)
+        item.classList.add('has-mod-color')
+        item.style.setProperty('--annotation-mod-color', modColor)
+      }
       item.dataset['geneIndex'] = String(index)
       if (index === this.detailSelectedGeneIndex) item.classList.add('is-active')
       item.addEventListener('click', () => this.selectDetailGene(index))
@@ -731,7 +733,9 @@ export class App {
 
       const sequenceEl = document.createElement('div')
       sequenceEl.className = 'annotation-sequence'
-      sequenceEl.textContent = gene.baseSequence ? `Sequence: ${gene.baseSequence}` : 'Sequence unavailable'
+      sequenceEl.textContent = this.isPeptideRow(gene) && gene.baseSequence
+        ? `Sequence: ${gene.baseSequence}`
+        : 'Sequence unavailable'
 
       item.appendChild(geneEl)
       item.appendChild(nameEl)
@@ -841,6 +845,7 @@ export class App {
 
   private matchesModificationFilter(gene: DataModel['genes'][number]): boolean {
     if (this.modFilter === MOD_FILTER_ALL) return true
+    if (!this.isPeptideRow(gene)) return this.modFilter === 'Unmodified'
     if (this.modFilter === 'Unmodified') return !gene.modifications.hasModification
     if (this.modFilter === MOD_FILTER_MODIFIED) return gene.modifications.hasModification
     if (this.modFilter === MOD_FILTER_HIDE_UNMODIFIED) return gene.modifications.hasModification
@@ -849,23 +854,22 @@ export class App {
 
   private makeGenePrimaryLabel(gene: DataModel['genes'][number]): string {
     const position = this.makeProteinPositionLabel(gene)
-    return `${position} · ${gene.modifications.displayLabel}`
+    return this.isPeptideRow(gene) ? `${position} · ${gene.modifications.displayLabel}` : position
   }
 
   private makeGeneSecondaryLabel(gene: DataModel['genes'][number]): string {
     const title = gene.name || gene.annotation || gene.yorf || 'Unknown peptide'
-    return `${title} · ${gene.modifications.category}`
+    return this.isPeptideRow(gene) ? `${title} · ${gene.modifications.category}` : title
   }
 
   private makeProteinPositionLabel(gene: DataModel['genes'][number]): string {
-    const start = gene.metadata['PEPTIDE_START'] || gene.metadata['START'] || gene.metadata['START_POS']
-    const end = gene.metadata['PEPTIDE_END'] || gene.metadata['END'] || gene.metadata['END_POS']
-    const range = gene.metadata['PEPTIDE_RANGE'] || gene.metadata['PEPTIDE']
-    if (start && end) return `${start}-${end}`
-    if (range) return range
-    const modPositions = gene.modifications.modifications.map((mod) => mod.position).filter((value): value is number => value !== null)
-    if (modPositions.length > 0) return `pos ${modPositions.join(',')}`
-    return gene.baseSequence ?? gene.yorf
+    const position = extractProteinPosition(gene)
+    if (position) return `${position.start}-${position.end}`
+    return this.isPeptideRow(gene) ? (gene.baseSequence ?? gene.yorf) : gene.yorf
+  }
+
+  private isPeptideRow(gene: DataModel['genes'][number]): gene is PeptideRow {
+    return 'baseSequence' in gene && 'modifications' in gene && 'startPosition' in gene && 'endPosition' in gene
   }
 
   private updateDetailSelectionBand(): void {
@@ -986,8 +990,8 @@ export class App {
       const label = document.createElement('div')
       label.className = 'gene-label'
       label.textContent = this.makeGenePrimaryLabel(gene)
-      label.title = `${this.makeGeneSecondaryLabel(gene)}${gene.baseSequence ? `\n${gene.baseSequence}` : ''}`
-      label.style.color = getGeneModificationColor(gene)
+      label.title = `${this.makeGeneSecondaryLabel(gene)}${this.isPeptideRow(gene) && gene.baseSequence ? `\n${gene.baseSequence}` : ''}`
+      if (this.isPeptideRow(gene)) label.style.color = getGeneModificationColor(gene)
       label.style.top = `${gAxis.indexToPixel(i + 0.5)}px`
       frag.appendChild(label)
     }

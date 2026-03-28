@@ -22,16 +22,21 @@ export interface GeneRow {
   name: string | null
   /** Gene annotation, e.g. "regulator of G-protein signaling" or more commonly, "biological_process unknown" */
   annotation: string | null
-  /** Raw peptide sequence with embedded modification annotations removed */
-  baseSequence: string | null
-  /** Parsed peptide/proteoform modification metadata */
-  modifications: PeptideModificationSummary
   /** Expression weight (usually 1.0) */
   gweight: number
   /** Additional non-expression metadata columns preserved from the CDT row */
   metadata: Record<string, string>
   /** Log2 expression values, null = missing data */
   values: (number | null)[]
+}
+
+export interface PeptideRow extends GeneRow {
+  /** Raw peptide sequence with embedded modification annotations removed */
+  baseSequence: string | null
+  /** Parsed peptide/proteoform modification metadata */
+  modifications: PeptideModificationSummary
+  startPosition: number | null
+  endPosition: number | null
 }
 
 export interface PeptideModification {

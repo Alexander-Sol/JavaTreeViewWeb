@@ -13,13 +13,11 @@ describe('cdtParser modification support', () => {
     const parsed = parseCdt(cdt)
     const [first, second] = parsed.genes
 
-    expect(first?.baseSequence).toBe('PEPTIDEK')
-    expect(first?.modifications.displayLabel).toBe('Phosphorylation')
-    expect(first?.modifications.category).toBe('Biological Mod')
-    expect(first?.modifications.modifications[0]?.position).toBe(4)
+    expect('baseSequence' in (first ?? {})).toBe(false)
+    expect('modifications' in (first ?? {})).toBe(false)
 
-    expect(second?.modifications.displayLabel).toBe('Phosphorylation')
-    expect(second?.modifications.category).toBe('Biological Mod')
+    expect('baseSequence' in (second ?? {})).toBe(false)
+    expect('modifications' in (second ?? {})).toBe(false)
   })
 
   test('classifies unmodified peptides when no brackets are present', () => {
@@ -30,7 +28,37 @@ describe('cdtParser modification support', () => {
     ].join('\n')
 
     const parsed = parseCdt(cdt)
-    expect(parsed.genes[0]?.modifications.category).toBe('Unmodified')
-    expect(parsed.genes[0]?.modifications.hasModification).toBe(false)
+    expect('modifications' in (parsed.genes[0] ?? {})).toBe(false)
+  })
+
+  test('creates peptide rows when start and end columns exist', () => {
+    const cdt = [
+      'GID\tYORF\tNAME\tSTART\tEND\tGWEIGHT\tSample1',
+      'AID\t\t\t\t\t\tARRY1',
+      'GENE1X\tP12345\tPEPTIDEK\t17\t24\t1\t2.0',
+    ].join('\n')
+
+    const parsed = parseCdt(cdt)
+    expect(parsed.genes[0]).toMatchObject({
+      startPosition: 17,
+      endPosition: 24,
+      baseSequence: 'PEPTIDEK',
+      modifications: {
+        displayLabel: 'Unmodified',
+        category: 'Unmodified',
+      },
+    })
+  })
+
+  test('does not create peptide rows when start and end columns are absent', () => {
+    const cdt = [
+      'GID\tYORF\tNAME\tGWEIGHT\tSample1',
+      'AID\t\t\t\tARRY1',
+      'GENE1X\tP12345\tPEPTIDEK\t1\t2.0',
+    ].join('\n')
+
+    const parsed = parseCdt(cdt)
+    expect('startPosition' in (parsed.genes[0] ?? {})).toBe(false)
+    expect('endPosition' in (parsed.genes[0] ?? {})).toBe(false)
   })
 })

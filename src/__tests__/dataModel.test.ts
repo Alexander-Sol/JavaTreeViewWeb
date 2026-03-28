@@ -8,13 +8,6 @@ function makeGene(id: string): GeneRow {
     yorf: id,
     name: id,
     annotation: null,
-    baseSequence: id,
-    modifications: {
-      displayLabel: 'Unmodified',
-      category: 'Unmodified',
-      hasModification: false,
-      modifications: [],
-    },
     gweight: 1,
     metadata: {},
     values: [],

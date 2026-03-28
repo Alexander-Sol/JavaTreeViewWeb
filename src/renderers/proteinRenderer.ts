@@ -64,17 +64,11 @@ export class ProteinRenderer {
 
     if (this.highlightedSegments.length === 0) return
 
-    const segmentsByColor = groupSegmentsByColor(this.highlightedSegments)
-    const mergedSegments: ProteinSegment[] = []
-
-    for (const [hexColor, segments] of segmentsByColor) {
-      viewer.plugin.canvas3d?.setProps({ renderer: { highlightColor: Color.fromHexStyle(hexColor) } })
-      selectionManager.fromSelectionQuery('add', buildSegmentQuery(segments), true)
-      mergedSegments.push(...segments)
-    }
-
-    selectionManager.fromSelectionQuery('set', buildSegmentQuery(mergedSegments), true)
-    viewer.plugin.canvas3d?.setProps({ renderer: { highlightColor: this.defaultColor } })
+    selectionManager.fromSelectionQuery('set', buildSegmentQuery(this.highlightedSegments), true)
+    const firstColor = this.highlightedSegments[0]?.color
+    viewer.plugin.canvas3d?.setProps({
+      renderer: { highlightColor: firstColor ? Color.fromHexStyle(firstColor) : this.defaultColor },
+    })
   }
 
   private async getViewer(): Promise<Viewer> {
@@ -111,17 +105,6 @@ function buildSegmentQuery(segments: ProteinSegment[]) {
     'Selected peptide segments',
     MS.struct.combinator.merge(segments.map(createSegmentExpression)),
   )
-}
-
-function groupSegmentsByColor(segments: ProteinSegment[]): Map<string, ProteinSegment[]> {
-  const grouped = new Map<string, ProteinSegment[]>()
-  for (const segment of segments) {
-    const color = segment.color ?? '#f4c145'
-    const existing = grouped.get(color)
-    if (existing) existing.push(segment)
-    else grouped.set(color, [segment])
-  }
-  return grouped
 }
 
 function createSegmentExpression(segment: ProteinSegment) {

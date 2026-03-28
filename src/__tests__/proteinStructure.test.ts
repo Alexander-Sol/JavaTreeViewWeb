@@ -2,10 +2,12 @@ import { describe, expect, test } from 'bun:test'
 import {
   collectProteinSegmentsFromGenes,
   detectProteinStructureFormat,
+  extractProteinPosition,
   pdbmlToPdb,
   prepareProteinStructureText,
 } from '../renderers/proteinStructure'
-import type { GeneRow } from '../model/types'
+import type { GeneRow, PeptideRow } from '../model/types'
+import { getGeneModificationColor } from '../ui/modColors'
 
 const pdbPath = `${import.meta.dir}/../../public/sample-data/6A9P.pdb`
 const pdbXmlPath = `${import.meta.dir}/../../public/sample-data/6A9P.xml`
@@ -16,6 +18,15 @@ function makeGeneRow(metadata: Record<string, string>): GeneRow {
     yorf: 'PEPTIDE',
     name: 'Peptide',
     annotation: null,
+    gweight: 1,
+    metadata,
+    values: [],
+  }
+}
+
+function makePeptideRow(metadata: Record<string, string>, startPosition = 1, endPosition = 1): PeptideRow {
+  return {
+    ...makeGeneRow(metadata),
     baseSequence: 'PEPTIDE',
     modifications: {
       displayLabel: 'Unmodified',
@@ -23,9 +34,8 @@ function makeGeneRow(metadata: Record<string, string>): GeneRow {
       hasModification: false,
       modifications: [],
     },
-    gweight: 1,
-    metadata,
-    values: [],
+    startPosition,
+    endPosition,
   }
 }
 
@@ -55,15 +65,63 @@ describe('protein structure helpers', () => {
   })
 
   test('collects and merges peptide residue segments from gene metadata', () => {
+    const first = makePeptideRow({ CHAIN: 'A' }, 218, 230)
+    const second = makePeptideRow({ CHAIN: 'A' }, 231, 258)
+    const third = makePeptideRow({ CHAIN: 'B' }, 400, 410)
     const segments = collectProteinSegmentsFromGenes([
-      makeGeneRow({ PEPTIDE_START: '218', PEPTIDE_END: '230', CHAIN: 'A' }),
-      makeGeneRow({ PEPTIDE_RANGE: '231-258', CHAIN: 'A' }),
-      makeGeneRow({ START: '400', END: '410', CHAIN: 'B' }),
+      first,
+      second,
+      third,
     ])
 
     expect(segments).toEqual([
-      { start: 218, end: 258, chainId: 'A', sequenceIdKind: 'auth' },
-      { start: 400, end: 410, chainId: 'B', sequenceIdKind: 'auth' },
+      {
+        start: 218,
+        end: 258,
+        chainId: 'A',
+        sequenceIdKind: 'auth',
+        color: getGeneModificationColor(makePeptideRow({})),
+        label: 'Unmodified',
+      },
+      {
+        start: 400,
+        end: 410,
+        chainId: 'B',
+        sequenceIdKind: 'auth',
+        color: getGeneModificationColor(makePeptideRow({})),
+        label: 'Unmodified',
+      },
     ])
+  })
+
+  test('does not treat peptide sequence text as a protein residue range', () => {
+    const position = extractProteinPosition(makeGeneRow({ PEPTIDE: 'PEPTIDEK' }))
+    expect(position).toBeNull()
+  })
+
+  test('extracts explicit numeric protein range from metadata', () => {
+    const peptideRow = makePeptideRow({}, 231, 258)
+    const position = extractProteinPosition(peptideRow)
+    expect(position).toEqual({ start: 231, end: 258, sequenceIdKind: 'auth' })
+  })
+
+  test('falls back to modification site positions when metadata lacks residue bounds', () => {
+    const peptideRow: PeptideRow = {
+      ...makePeptideRow({}, 0, 0),
+      startPosition: null,
+      endPosition: null,
+      modifications: {
+        displayLabel: 'Phosphorylation',
+        category: 'Biological Mod',
+        hasModification: true,
+        modifications: [
+          { rawText: 'a', namespace: null, normalizedName: 'Phosphorylation', category: 'Phosphorylation', site: 'T', position: 9 },
+          { rawText: 'b', namespace: null, normalizedName: 'Phosphorylation', category: 'Phosphorylation', site: 'S', position: 12 },
+        ],
+      },
+    }
+    const position = extractProteinPosition(peptideRow)
+
+    expect(position).toEqual({ start: 9, end: 12, sequenceIdKind: 'auth' })
   })
 })

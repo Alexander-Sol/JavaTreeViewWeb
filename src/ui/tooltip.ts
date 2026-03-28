@@ -1,4 +1,4 @@
-import type { DataModel } from '../model/types'
+import type { DataModel, PeptideRow } from '../model/types'
 import type { ColorScale } from '../color/colorScale'
 
 export class Tooltip {
@@ -31,7 +31,7 @@ export class Tooltip {
     this.el.innerHTML = `
       <div class="tooltip-gene">${escHtml(gene.yorf)}${gene.name ? ' — ' + escHtml(gene.name.trim()) : ''}</div>
       <div class="tooltip-sample">${escHtml(sample)}</div>
-      <div class="tooltip-sample">${escHtml(gene.baseSequence ?? gene.name ?? 'Unknown peptide')} · ${escHtml(gene.modifications.displayLabel)}</div>
+      <div class="tooltip-sample">${escHtml(describeGene(gene))}</div>
       <div class="tooltip-value">
         <span class="tooltip-swatch" style="background:${swatchColor}"></span>
         ${valStr}
@@ -58,4 +58,15 @@ export class Tooltip {
 
 function escHtml(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+}
+
+function describeGene(gene: DataModel['genes'][number]): string {
+  if (isPeptideRow(gene)) {
+    return `${gene.baseSequence ?? gene.name ?? 'Unknown peptide'} · ${gene.modifications.displayLabel}`
+  }
+  return gene.name ?? gene.yorf ?? 'Unknown peptide'
+}
+
+function isPeptideRow(gene: DataModel['genes'][number]): gene is PeptideRow {
+  return 'baseSequence' in gene && 'modifications' in gene && 'startPosition' in gene && 'endPosition' in gene
 }

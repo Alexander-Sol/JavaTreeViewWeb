@@ -1,4 +1,4 @@
-import type { CdtData, GeneRow, PeptideModification, PeptideModificationSummary } from '../model/types'
+import type { CdtData, GeneRow, PeptideModification, PeptideModificationSummary, PeptideRow } from '../model/types'
 
 const META_COLS = new Set(['GID', 'YORF', 'NAME', 'FGCOLOR', 'BGCOLOR', 'GWEIGHT'])
 const SKIP_ROW_IDS = new Set(['EWEIGHT', 'BGCOLOR', 'FGCOLOR'])
@@ -90,6 +90,7 @@ export function parseCdt(text: string): CdtData {
   const headerTokens = splitLine(lines[0] ?? '')
   const colIndex = buildColIndex(headerTokens)
   const hasGID = colIndex.has('GID')
+  const hasPeptidePositions = hasStartAndEndColumns(colIndex)
   const dataStartCol = detectDataStartCol(lines, headerTokens)
   const sampleNames = headerTokens.slice(dataStartCol).map((s) => s.trim())
 
@@ -110,7 +111,7 @@ export function parseCdt(text: string): CdtData {
 
     if (SKIP_ROW_IDS.has(firstToken)) continue
 
-    genes.push(parseGeneRow(headerTokens, tokens, colIndex, dataStartCol, hasGID))
+    genes.push(parseGeneRow(headerTokens, tokens, colIndex, dataStartCol, hasGID, hasPeptidePositions))
   }
 
   return { sampleNames, arrayIds, genes, hasGID }
@@ -152,6 +153,7 @@ function parseGeneRow(
   colIndex: Map<string, number>,
   dataStartCol: number,
   hasGID: boolean,
+  hasPeptidePositions: boolean,
 ): GeneRow {
   const get = (key: string): string => {
     const idx = colIndex.get(key)
@@ -180,7 +182,28 @@ function parseGeneRow(
     return isNaN(n) ? null : n
   })
 
-  return { gid, yorf, name, annotation, baseSequence, modifications, gweight, metadata, values }
+  const baseRow: GeneRow = { gid, yorf, name, annotation, gweight, metadata, values }
+  if (!hasPeptidePositions) return baseRow
+
+  const peptideRow: PeptideRow = {
+    ...baseRow,
+    baseSequence,
+    modifications,
+    startPosition: parseInteger(get('START')),
+    endPosition: parseInteger(get('END')),
+  }
+  return peptideRow
+}
+
+function hasStartAndEndColumns(colIndex: Map<string, number>): boolean {
+  return colIndex.has('START') && colIndex.has('END')
+}
+
+function parseInteger(value: string): number | null {
+  const trimmed = value.trim()
+  if (!trimmed) return null
+  const parsed = Number.parseInt(trimmed, 10)
+  return Number.isFinite(parsed) ? parsed : null
 }
 
 function parseGeneName(nameString: string): {
