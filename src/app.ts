@@ -460,6 +460,7 @@ export class App {
       const { cdtUrl, gtrUrl, atrUrl, proteinUrl } = getSampleUrls(sample)
       this.setStatus(`Loading ${sample.label}…`)
       const { model, filename } = await loadFromUrls(cdtUrl, gtrUrl, atrUrl)
+      this.resetBaseModel(model)
       await this.applyModel(model, filename, proteinUrl)
     } catch (err) {
       this.setStatus(`Error: ${(err as Error).message}`)
@@ -470,6 +471,7 @@ export class App {
     try {
       this.setStatus('Loading…')
       const { model, filename } = await loadFromFiles(files)
+      this.resetBaseModel(model)
       await this.applyModel(model, filename)
     } catch (err) {
       this.setStatus(`Error: ${(err as Error).message}`)
@@ -477,10 +479,10 @@ export class App {
   }
 
   private async applyModel(model: DataModel, filename: string, proteinUrl?: string): Promise<void> {
-    this.baseModel = model
+    if (this.modFilter === MOD_FILTER_ALL || this.baseModel === null) this.baseModel = model
     this.currentFilename = filename
     this.currentProteinUrl = proteinUrl
-    this.populateModificationFilter(model)
+    this.populateModificationFilter(this.baseModel)
     this.model = model
     this.detailModel = null
     this.geneSelection = null
@@ -811,14 +813,19 @@ export class App {
   private applyCurrentFilter(): void {
     if (!this.baseModel) return
 
-    const filteredGenes = this.baseModel.genes.filter((gene) => this.matchesModificationFilter(gene))
+    const sourceModel = this.baseModel
+    const filteredGenes = sourceModel.genes.filter((gene) => this.matchesModificationFilter(gene))
     const nextModel: DataModel = {
-      ...this.baseModel,
+      ...sourceModel,
       genes: filteredGenes,
     }
     nextModel.expressionMatrix = filteredGenes.map((gene) => [...gene.values])
     this.model = nextModel
     void this.applyModel(nextModel, this.currentFilename, this.currentProteinUrl)
+  }
+
+  private resetBaseModel(model: DataModel): void {
+    this.baseModel = model
   }
 
   private populateModificationFilter(model: DataModel): void {
