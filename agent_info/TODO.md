@@ -8,7 +8,7 @@
 
 ## Pending
 
-- [ ] **Annotation list: show peptide position** — Each item in the annotation list should display the
+- [x] **Annotation list: show peptide position** — Each item in the annotation list should display the
   peptide's Start and End position within the protein (from the CDT metadata), if available.
 
 - [ ] **Out-of-range peptide warning** — If a selected peptide's Start/End range falls entirely outside
