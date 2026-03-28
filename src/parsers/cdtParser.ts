@@ -1,44 +1,101 @@
-import type { CdtData, GeneRow } from '../model/types'
+import type { CdtData, GeneRow, PeptideModification, PeptideModificationSummary } from '../model/types'
 
-/**
- * Column names that are metadata (not expression data).
- * Order matters: defines which columns appear before the data columns.
- */
 const META_COLS = new Set(['GID', 'YORF', 'NAME', 'FGCOLOR', 'BGCOLOR', 'GWEIGHT'])
-
-/**
- * Row identifiers that mark special metadata rows (not gene data rows).
- */
 const SKIP_ROW_IDS = new Set(['EWEIGHT', 'BGCOLOR', 'FGCOLOR'])
 
-/**
- * Parse a CDT (Cluster Document Text) tab-delimited file.
- *
- * Handles two formats:
- *   - GID format  (spellman):   GID | YORF | NAME | GWEIGHT | [samples...]
- *   - YORF format (colorTest):  YORF | NAME | FGCOLOR | BGCOLOR | GWEIGHT | [samples...]
- *
- * Special rows (AID, EWEIGHT, BGCOLOR, FGCOLOR) are recognised and skipped
- * or recorded appropriately.
- */
+const BIOLOGICAL_MODS = new Set([
+  'Phosphorylation',
+  'Acetylation',
+  'Citrullination',
+  'Hydroxyproline',
+  'Methylation',
+  'Diphthamide',
+  'Trimethylation',
+  'Succinylation',
+  'Dimethylation',
+  'Nitrosylation',
+  'Glutarylation',
+  'Palmitoylation',
+  'Malonylation',
+  'Crotonylation',
+  'Butyrylation',
+  'Hydroxybutyrylation',
+  'Ubiquitination',
+  'Myristoylation',
+  'Lipoylation',
+  'Glutamylation',
+ ])
+
+const UNINTERESTING_MODS = new Set([
+  'Carbamidomethyl',
+  'Carbamyl',
+  'Formylation',
+  'Sodium',
+  'Potassium',
+  'Magnesium',
+  'Calcium',
+  'Deamidation',
+  'Deamidated',
+  'Iron',
+  'Ammonia',
+  'Water Loss',
+  'Carboxylation',
+ ])
+
+const MOD_REPLACEMENTS: Array<[RegExp, string]> = [
+  [/Phospho/i, 'Phosphorylation'],
+  [/Phosphothreonine/i, 'Phosphorylation'],
+  [/Phosphoserine/i, 'Phosphorylation'],
+  [/Phosphotyrosine/i, 'Phosphorylation'],
+  [/Phosphorylation on /i, 'Phosphorylation'],
+  [/Citrulli/i, 'Citrullination'],
+  [/acetyl/i, 'Acetylation'],
+  [/Hydroxylation on P/i, 'Hydroxyproline'],
+  [/4-hydroxypro/i, 'Hydroxyproline'],
+  [/xidation on P/i, 'Hydroxyproline'],
+  [/Hydroxylation/i, 'Oxidation'],
+  [/xidation/i, 'Oxidation'],
+  [/hydroxy/i, 'Oxidation'],
+  [/GG/i, 'Ubiquitination'],
+  [/Omega-N/i, 'Methylation'],
+  [/Tele-methly/i, 'Methylation'],
+  [/-methyl/i, 'Methylation'],
+  [/trimethyl/i, 'Trimethylation'],
+  [/dimethyl/i, 'Dimethylation'],
+  [/Symmetric/i, 'Dimethylation'],
+  [/Asymmetric/i, 'Dimethylation'],
+  [/Dimethylated/i, 'Dimethylation'],
+  [/-nitro/i, 'Nitrosylation'],
+  [/-succin/i, 'Succinylation'],
+  [/-malonyl/i, 'Malonylation'],
+  [/-glutamyl/i, 'Glutamylation'],
+  [/butyryll/i, 'Butyrylation'],
+  [/palmitoyl/i, 'Palmitoylation'],
+  [/myristoyl/i, 'Myristoylation'],
+  [/glutary/i, 'Glutarylation'],
+  [/crotonyl/i, 'Crotonylation'],
+  [/lipoyll/i, 'Lipoylation'],
+  [/Pyrrolidone/i, 'Pyroglutamate'],
+  [/Cysteine/i, 'Cysteine Sulfinic Acid'],
+  [/N-Pyruvate/i, 'N-pyruvate 2-iminyl-valine'],
+  [/Fe\[/i, 'Iron'],
+  [/Cu\[/i, 'Copper'],
+  [/Deamidat/i, 'Deamidation'],
+  [/Water/i, 'Water Loss'],
+  [/Carboxymethylation on K/i, 'Carboxymethyllysine'],
+]
+
 export function parseCdt(text: string): CdtData {
   const lines = text.split(/\r?\n/)
-
-  // ---- Parse header row ----
   const headerTokens = splitLine(lines[0] ?? '')
   const colIndex = buildColIndex(headerTokens)
-
   const hasGID = colIndex.has('GID')
-
   const dataStartCol = detectDataStartCol(lines, headerTokens)
-
-  // Sample names: everything from dataStartCol onward in the header row
   const sampleNames = headerTokens.slice(dataStartCol).map((s) => s.trim())
 
   let arrayIds: string[] | null = null
   const genes: GeneRow[] = []
 
-  // ---- Parse remaining rows ----
   for (let li = 1; li < lines.length; li++) {
     const line = lines[li]
     if (line === undefined || line.trim() === '') continue
@@ -46,30 +103,19 @@ export function parseCdt(text: string): CdtData {
     const tokens = splitLine(line)
     const firstToken = (tokens[0] ?? '').trim().toUpperCase()
 
-    // AID row: contains array/sample tree leaf IDs
     if (firstToken === 'AID') {
       arrayIds = tokens.slice(dataStartCol).map((s) => s.trim())
       continue
     }
 
-    // Skip other metadata rows
     if (SKIP_ROW_IDS.has(firstToken)) continue
 
-    // Data row
-    const gene = parseGeneRow(headerTokens, tokens, colIndex, dataStartCol, hasGID)
-    genes.push(gene)
+    genes.push(parseGeneRow(headerTokens, tokens, colIndex, dataStartCol, hasGID))
   }
 
   return { sampleNames, arrayIds, genes, hasGID }
 }
 
-// ============================================================
-// Internal helpers
-// ============================================================
-
-/**
- * Split a tab-delimited line, handling quoted fields (e.g. "RGR1, name").
- */
 function splitLine(line: string): string[] {
   const result: string[] = []
   let current = ''
@@ -86,13 +132,11 @@ function splitLine(line: string): string[] {
       current += ch
     }
   }
+
   result.push(current)
   return result
 }
 
-/**
- * Build a map from upper-cased column name → column index.
- */
 function buildColIndex(headers: string[]): Map<string, number> {
   const map = new Map<string, number>()
   for (let i = 0; i < headers.length; i++) {
@@ -116,7 +160,7 @@ function parseGeneRow(
 
   const gid = hasGID ? get('GID').trim() || null : null
   const yorf = get('YORF').trim()
-  const { name, annotation } = parseGeneName(get('NAME'))
+  const { name, annotation, baseSequence, modifications } = parseGeneName(get('NAME'))
   const gweightStr = get('GWEIGHT').trim()
   const gweight = gweightStr !== '' ? parseFloat(gweightStr) : 1.0
 
@@ -136,22 +180,144 @@ function parseGeneRow(
     return isNaN(n) ? null : n
   })
 
-  return { gid, yorf, name, annotation, gweight, metadata, values }
+  return { gid, yorf, name, annotation, baseSequence, modifications, gweight, metadata, values }
 }
 
-function parseGeneName(nameString:string): {name: string | null, annotation: string | null} {
+function parseGeneName(nameString: string): {
+  name: string | null
+  annotation: string | null
+  baseSequence: string | null
+  modifications: PeptideModificationSummary
+} {
   let geneName: string | null = null
-  let annotation: string | null = nameString.trim() || null // If it starts with whitespace, it's probably missing the name and just has annotation
-  if (/^\s/.test(nameString)) return { name: null, annotation } // If it starts with whitespace, it's probably missing the name and just has annotation
-  if (/\t| {3,}/.test(nameString)) { // If we've got a long stretch of spaces or a tab, it's probably separating name from annotation
+  let annotation: string | null = nameString.trim() || null
+  if (/^\s/.test(nameString)) {
+    const parsed = parsePeptideModifications(annotation)
+    return { name: null, annotation, baseSequence: parsed.baseSequence, modifications: parsed.summary }
+  }
+
+  if (/\t| {3,}/.test(nameString)) {
     const endIndex = nameString.search(/\t|\s/)
     geneName = nameString.slice(0, endIndex).trim() || null
     annotation = nameString.slice(endIndex).trim() || null
   } else {
-    geneName = nameString.trim() || null // TODO: Will need to handle peptide mod parsing here later
+    geneName = nameString.trim() || null
     annotation = null
   }
-  return { name: geneName, annotation: annotation }
+
+  const parsed = parsePeptideModifications(geneName)
+  return {
+    name: geneName,
+    annotation,
+    baseSequence: parsed.baseSequence,
+    modifications: parsed.summary,
+  }
+}
+
+function parsePeptideModifications(sequenceText: string | null): {
+  baseSequence: string | null
+  summary: PeptideModificationSummary
+} {
+  const text = sequenceText?.trim() ?? ''
+  if (!text) return { baseSequence: null, summary: emptyModificationSummary() }
+
+  const modifications: PeptideModification[] = []
+  const residueMap = buildResidueMap(text)
+  const bracketPattern = /\[([^\]]+)\]/g
+  let match: RegExpExecArray | null
+  while ((match = bracketPattern.exec(text)) !== null) {
+    const rawText = (match[1] ?? '').trim()
+    if (!rawText) continue
+    modifications.push(normalizeModification(rawText, residueMap, match.index))
+  }
+
+  const baseSequence = text.replace(/\[[^\]]+\]/g, '').trim() || null
+  if (modifications.length === 0) return { baseSequence, summary: emptyModificationSummary() }
+
+  const names = Array.from(new Set(modifications.map((mod) => mod.normalizedName)))
+  return {
+    baseSequence,
+    summary: {
+      displayLabel: names.join(', '),
+      category: classifyModificationCategory(modifications),
+      hasModification: true,
+      modifications,
+    },
+  }
+}
+
+function emptyModificationSummary(): PeptideModificationSummary {
+  return {
+    displayLabel: 'Unmodified',
+    category: 'Unmodified',
+    hasModification: false,
+    modifications: [],
+  }
+}
+
+function buildResidueMap(text: string): number[] {
+  const positions: number[] = []
+  let residueIndex = 0
+  let inBracket = false
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i]!
+    if (ch === '[') {
+      inBracket = true
+      continue
+    }
+    if (ch === ']') {
+      inBracket = false
+      continue
+    }
+    if (inBracket) continue
+    if (/[A-Z]/.test(ch)) residueIndex += 1
+    positions[i] = residueIndex
+  }
+  return positions
+}
+
+function normalizeModification(rawText: string, residueMap: number[], bracketIndex: number): PeptideModification {
+  const parts = rawText.split(':')
+  const namespace = parts.length > 1 ? parts[0]!.trim() || null : null
+  const detail = parts.length > 1 ? parts.slice(1).join(':').trim() : rawText
+  const siteMatch = detail.match(/\bon\s+([A-Z])/i)
+  const site = siteMatch?.[1]?.toUpperCase() ?? null
+  const normalizedName = replaceModificationName(detail)
+  const residueIndex = residueMap[Math.max(0, bracketIndex - 1)] ?? null
+
+  return {
+    rawText,
+    namespace,
+    normalizedName,
+    category: classifySingleModification(normalizedName),
+    site,
+    position: residueIndex,
+  }
+}
+
+function replaceModificationName(value: string): string {
+  for (const [pattern, replacement] of MOD_REPLACEMENTS) {
+    if (pattern.test(value)) return replacement
+  }
+  return value.replace(/\s+on\s+.+$/i, '').trim() || value.trim()
+}
+
+function classifySingleModification(value: string): string {
+  if (BIOLOGICAL_MODS.has(value)) return value
+  if (UNINTERESTING_MODS.has(value)) return 'Other Mod'
+  if (value === 'Carbamidomethyl') return 'Carbamidomethylation'
+  if (/Carboxymethyl/i.test(value)) return 'Carboxymethylation'
+  return 'Other Mod'
+}
+
+function classifyModificationCategory(modifications: PeptideModification[]): string {
+  const normalizedNames = modifications.map((mod) => mod.normalizedName)
+  if (normalizedNames.some((name) => /Carboxymethyl/i.test(name))) return 'Carboxymethylation'
+  if (normalizedNames.some((name) => BIOLOGICAL_MODS.has(name))) return 'Biological Mod'
+  if (normalizedNames.length > 0 && normalizedNames.every((name) => name === 'Carbamidomethyl')) {
+    return 'Carbamidomethylation'
+  }
+  return 'Other Mod'
 }
 
 function detectDataStartCol(lines: string[], headerTokens: string[]): number {
