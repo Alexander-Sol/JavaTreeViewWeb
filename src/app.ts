@@ -2,7 +2,7 @@ import { Viewport } from './renderers/viewport'
 import { HeatmapRenderer } from './renderers/heatmapRenderer'
 import { DendrogramRenderer } from './renderers/dendrogramRenderer'
 import { ProteinRenderer } from './renderers/proteinRenderer'
-import { collectProteinSegmentsFromGenes, detectProteinStructureFormat, extractProteinPosition } from './renderers/proteinStructure'
+import { collectProteinModificationMarkersFromGenes, collectProteinSegmentsFromGenes, detectProteinStructureFormat, extractProteinPosition } from './renderers/proteinStructure'
 import { ColorScale, COLOR_SCHEMES } from './color/colorScale'
 import { Tooltip } from './ui/tooltip'
 import { computeSelectionRange } from './ui/selectionManager'
@@ -776,23 +776,25 @@ export class App {
 
     const genes = this.getProteinHighlightGenes()
     const segments = collectProteinSegmentsFromGenes(genes)
+    const markers = collectProteinModificationMarkersFromGenes(genes)
     await this.proteinRenderer.setHighlightedSegments(segments)
+    await this.proteinRenderer.setModificationMarkers(markers)
 
     if (this.detailSelectedGeneIndex !== null && this.detailModel) {
-      this.proteinMessage.textContent = segments.length > 0
-        ? this.describeProteinSegments(segments)
-        : 'Selected row has no peptide residue metadata.'
+      this.proteinMessage.textContent = segments.length > 0 || markers.length > 0
+        ? this.describeProteinHighlights(segments, markers)
+        : 'Selected row has no mappable peptide or modification residue metadata.'
       return
     }
 
     if (this.geneSelection && this.detailModel) {
-      this.proteinMessage.textContent = segments.length > 0
-        ? this.describeProteinSegments(segments)
-        : 'Selected cluster has no peptide residue metadata.'
+      this.proteinMessage.textContent = segments.length > 0 || markers.length > 0
+        ? this.describeProteinHighlights(segments, markers)
+        : 'Selected cluster has no mappable peptide or modification residue metadata.'
       return
     }
 
-    this.proteinMessage.textContent = 'Select peptide-bearing rows or clusters to highlight residues.'
+    this.proteinMessage.textContent = 'Select peptide rows or clusters to highlight spans and show modification markers.'
   }
 
   private getProteinHighlightGenes(): DataModel['genes'] {
@@ -805,9 +807,13 @@ export class App {
     return []
   }
 
-  private describeProteinSegments(segments: ReturnType<typeof collectProteinSegmentsFromGenes>): string {
-    const residueCount = segments.reduce((sum, segment) => sum + (segment.end - segment.start + 1), 0)
-    return `${segments.length} segment${segments.length === 1 ? '' : 's'} highlighted across ${residueCount} residues.`
+  private describeProteinHighlights(
+    segments: ReturnType<typeof collectProteinSegmentsFromGenes>,
+    markers: ReturnType<typeof collectProteinModificationMarkersFromGenes>,
+  ): string {
+    const segmentResidueCount = segments.reduce((sum, segment) => sum + (segment.end - segment.start + 1), 0)
+    const residueCount = new Set(markers.map((marker) => `${marker.sequenceIdKind ?? 'auth'}:${marker.chainId ?? ''}:${marker.position}`)).size
+    return `${segments.length} peptide segment${segments.length === 1 ? '' : 's'} highlighted across ${segmentResidueCount} residue${segmentResidueCount === 1 ? '' : 's'}; ${markers.length} modification marker${markers.length === 1 ? '' : 's'} shown across ${residueCount} residue${residueCount === 1 ? '' : 's'}.`
   }
 
   private applyCurrentFilter(): void {

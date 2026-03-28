@@ -1,5 +1,5 @@
-import type { GeneRow, PeptideRow } from '../model/types'
-import { getGeneModificationColor } from '../ui/modColors'
+import type { GeneRow, PeptideModification, PeptideRow } from '../model/types'
+import { getGeneModificationColor, getPeptideModificationColor } from '../ui/modColors'
 
 export type ProteinStructureFormat = 'pdb' | 'pdbxml'
 export type ProteinSequenceIdKind = 'auth' | 'label'
@@ -7,6 +7,14 @@ export type ProteinSequenceIdKind = 'auth' | 'label'
 export interface ProteinSegment {
   start: number
   end: number
+  chainId?: string
+  sequenceIdKind?: ProteinSequenceIdKind
+  color?: string
+  label?: string
+}
+
+export interface ProteinModificationMarker {
+  position: number
   chainId?: string
   sequenceIdKind?: ProteinSequenceIdKind
   color?: string
@@ -109,6 +117,41 @@ export function collectProteinSegmentsFromGenes(genes: GeneRow[]): ProteinSegmen
   }
 
   return normalizeProteinSegments(segments)
+}
+
+export function collectProteinModificationMarkersFromGenes(genes: GeneRow[]): ProteinModificationMarker[] {
+  const markers: ProteinModificationMarker[] = []
+
+  for (const gene of genes) {
+    if (!isPeptideRow(gene)) continue
+    const metadata = normalizeMetadata(gene.metadata)
+    const chainId = getMetadataValue(metadata, CHAIN_KEYS) || undefined
+    const sequenceIdKind: ProteinSequenceIdKind =
+      getMetadataValue(metadata, LABEL_SEQ_HINT_KEYS) ? 'label' : 'auth'
+
+    for (const modification of gene.modifications.modifications) {
+      const position = mapModificationToProteinPosition(gene, modification)
+      if (position === null) continue
+      markers.push({
+        position,
+        chainId,
+        sequenceIdKind,
+        color: getPeptideModificationColor(modification),
+        label: buildModificationMarkerLabel(modification, position, gene),
+      })
+    }
+  }
+
+  return normalizeProteinModificationMarkers(markers)
+}
+
+export function mapModificationToProteinPosition(
+  gene: Pick<PeptideRow, 'startPosition'>,
+  modification: Pick<PeptideModification, 'position'>,
+): number | null {
+  if (modification.position === null) return null
+  if (gene.startPosition !== null) return gene.startPosition + modification.position - 1
+  return modification.position
 }
 
 export function extractProteinPosition(gene: GeneRow): { start: number; end: number; sequenceIdKind: ProteinSequenceIdKind } | null {
@@ -214,6 +257,53 @@ function parsePositionFromModificationSites(
   const start = Math.min(...positions)
   const end = Math.max(...positions)
   return { start, end }
+}
+
+function normalizeProteinModificationMarkers(markers: ProteinModificationMarker[]): ProteinModificationMarker[] {
+  const normalized = markers
+    .map((marker) => ({
+      position: Math.trunc(marker.position),
+      chainId: marker.chainId?.trim() || undefined,
+      sequenceIdKind: marker.sequenceIdKind ?? 'auth',
+      color: marker.color,
+      label: marker.label,
+    }))
+    .filter((marker) => Number.isFinite(marker.position))
+
+  normalized.sort((a, b) => (
+    compareText(a.chainId, b.chainId) ||
+    compareText(a.sequenceIdKind, b.sequenceIdKind) ||
+    a.position - b.position ||
+    compareText(a.color, b.color) ||
+    compareText(a.label, b.label)
+  ))
+
+  const deduped: ProteinModificationMarker[] = []
+  for (const marker of normalized) {
+    const previous = deduped[deduped.length - 1]
+    if (
+      previous &&
+      previous.position === marker.position &&
+      previous.chainId === marker.chainId &&
+      previous.sequenceIdKind === marker.sequenceIdKind &&
+      previous.color === marker.color &&
+      previous.label === marker.label
+    ) {
+      continue
+    }
+    deduped.push(marker)
+  }
+
+  return deduped
+}
+
+function buildModificationMarkerLabel(
+  modification: Pick<PeptideModification, 'normalizedName' | 'site'>,
+  position: number,
+  gene: Pick<PeptideRow, 'modifications'>,
+): string {
+  const siteLabel = modification.site ? `${modification.site}${position}` : `Residue ${position}`
+  return `${modification.normalizedName} at ${siteLabel} (${gene.modifications.displayLabel})`
 }
 
 function isPeptideRow(gene: GeneRow): gene is PeptideRow {

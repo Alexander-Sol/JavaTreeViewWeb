@@ -1,14 +1,16 @@
 import { describe, expect, test } from 'bun:test'
 import {
+  collectProteinModificationMarkersFromGenes,
   collectProteinSegmentsFromGenes,
   detectProteinStructureFormat,
   extractProteinPosition,
+  mapModificationToProteinPosition,
   normalizeProteinSegments,
   pdbmlToPdb,
   prepareProteinStructureText,
 } from '../renderers/proteinStructure'
 import type { GeneRow, PeptideRow } from '../model/types'
-import { getGeneModificationColor } from '../ui/modColors'
+import { getGeneModificationColor, getPeptideModificationColor } from '../ui/modColors'
 
 const pdbPath = `${import.meta.dir}/../../public/sample-data/6A9P.pdb`
 const pdbXmlPath = `${import.meta.dir}/../../public/sample-data/6A9P.xml`
@@ -135,6 +137,44 @@ describe('protein structure helpers', () => {
     ).toEqual([
       { start: 10, end: 12, chainId: 'A', sequenceIdKind: 'auth', color: '#ff0000', label: 'A' },
       { start: 13, end: 15, chainId: 'A', sequenceIdKind: 'auth', color: '#00ff00', label: 'B' },
+    ])
+  })
+
+  test('maps modification positions from peptide-relative to protein-relative residues', () => {
+    expect(mapModificationToProteinPosition({ startPosition: 231 }, { position: 3 })).toBe(233)
+    expect(mapModificationToProteinPosition({ startPosition: null }, { position: 3 })).toBe(3)
+    expect(mapModificationToProteinPosition({ startPosition: 231 }, { position: null })).toBeNull()
+  })
+
+  test('collects site markers at mapped protein residues', () => {
+    const peptideRow: PeptideRow = {
+      ...makePeptideRow({ CHAIN: 'A' }, 231, 258),
+      modifications: {
+        displayLabel: 'Phosphorylation',
+        category: 'Biological Mod',
+        hasModification: true,
+        modifications: [
+          { rawText: 'a', namespace: null, normalizedName: 'Phosphorylation', category: 'Phosphorylation', site: 'T', position: 3 },
+          { rawText: 'b', namespace: null, normalizedName: 'Oxidation', category: 'Oxidation', site: 'M', position: 5 },
+        ],
+      },
+    }
+
+    expect(collectProteinModificationMarkersFromGenes([peptideRow])).toEqual([
+      {
+        position: 233,
+        chainId: 'A',
+        sequenceIdKind: 'auth',
+        color: getPeptideModificationColor(peptideRow.modifications.modifications[0]!),
+        label: 'Phosphorylation at T233 (Phosphorylation)',
+      },
+      {
+        position: 235,
+        chainId: 'A',
+        sequenceIdKind: 'auth',
+        color: getPeptideModificationColor(peptideRow.modifications.modifications[1]!),
+        label: 'Oxidation at M235 (Phosphorylation)',
+      },
     ])
   })
 })
