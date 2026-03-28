@@ -1,9 +1,15 @@
 import { Viewer } from 'molstar/lib/apps/viewer/app'
-import { StructureSelectionQuery } from 'molstar/lib/mol-plugin-state/helpers/structure-selection-query'
+import { Structure, StructureElement } from 'molstar/lib/mol-model/structure'
+import type { StructureComponentRef } from 'molstar/lib/mol-plugin-state/manager/structure/hierarchy-state'
+import { StateTransforms } from 'molstar/lib/mol-plugin-state/transforms'
+import { StateSelection } from 'molstar/lib/mol-state'
 import { MolScriptBuilder as MS } from 'molstar/lib/mol-script/language/builder'
 import { Color } from 'molstar/lib/mol-util/color'
 import type { ProteinSegment, ProteinStructureFormat } from './proteinStructure'
 import { normalizeProteinSegments, prepareProteinStructureText } from './proteinStructure'
+
+const DEFAULT_SEGMENT_COLOR = '#f4c145'
+const OVERPAINT_TAG = 'jtv-protein-overpaint'
 
 export class ProteinRenderer {
   private viewer: Viewer | null = null
@@ -11,7 +17,6 @@ export class ProteinRenderer {
   private loadVersion = 0
   private hasStructure = false
   private highlightedSegments: ProteinSegment[] = []
-  private readonly defaultColor = Color.fromHexStyle('#f4c145')
 
   constructor(private readonly container: HTMLElement) {}
 
@@ -60,15 +65,14 @@ export class ProteinRenderer {
   private async applyHighlights(): Promise<void> {
     const viewer = await this.getViewer()
     const selectionManager = viewer.plugin.managers.structure.selection
+    const components = this.getCurrentStructureComponents(viewer)
+
+    await this.clearOverpaint(viewer, components)
     selectionManager.clear()
 
     if (this.highlightedSegments.length === 0) return
 
-    selectionManager.fromSelectionQuery('set', buildSegmentQuery(this.highlightedSegments), true)
-    const firstColor = this.highlightedSegments[0]?.color
-    viewer.plugin.canvas3d?.setProps({
-      renderer: { highlightColor: firstColor ? Color.fromHexStyle(firstColor) : this.defaultColor },
-    })
+    await this.applyOverpaint(viewer, components)
   }
 
   private async getViewer(): Promise<Viewer> {
@@ -98,13 +102,54 @@ export class ProteinRenderer {
 
     return this.initPromise
   }
-}
 
-function buildSegmentQuery(segments: ProteinSegment[]) {
-  return StructureSelectionQuery(
-    'Selected peptide segments',
-    MS.struct.combinator.merge(segments.map(createSegmentExpression)),
-  )
+  private getCurrentStructureComponents(viewer: Viewer): StructureComponentRef[] {
+    const grouped = viewer.plugin.managers.structure.hierarchy.currentComponentGroups.flat()
+    if (grouped.length > 0) return grouped
+    return viewer.plugin.managers.structure.hierarchy.current.structures.flatMap((structure) => structure.components)
+  }
+
+  private async clearOverpaint(viewer: Viewer, components: StructureComponentRef[]): Promise<void> {
+    const state = viewer.plugin.state.data
+    const update = state.build()
+
+    for (const component of components) {
+      for (const representation of component.representations) {
+        const existing = state.select(
+          StateSelection.Generators
+            .ofTransformer(StateTransforms.Representation.OverpaintStructureRepresentation3DFromBundle, representation.cell.transform.ref)
+            .withTag(OVERPAINT_TAG),
+        )
+
+        for (const cell of existing) update.delete(cell.transform.ref)
+      }
+    }
+
+    await update.commit({ doNotUpdateCurrent: true })
+  }
+
+  private async applyOverpaint(viewer: Viewer, components: StructureComponentRef[]): Promise<void> {
+    const state = viewer.plugin.state.data
+    const update = state.build()
+
+    for (const component of components) {
+      for (const representation of component.representations) {
+        const structure = representation.cell.obj?.data.sourceData
+        if (!structure) continue
+
+        const layers = buildOverpaintLayers(structure.root, this.highlightedSegments)
+        if (layers.length === 0) continue
+
+        update.to(representation.cell.transform.ref).apply(
+          StateTransforms.Representation.OverpaintStructureRepresentation3DFromBundle,
+          { layers },
+          { tags: [OVERPAINT_TAG], state: { isGhost: true } },
+        )
+      }
+    }
+
+    await update.commit({ doNotUpdateCurrent: true })
+  }
 }
 
 function createSegmentExpression(segment: ProteinSegment) {
@@ -129,4 +174,45 @@ function createSegmentExpression(segment: ProteinSegment) {
   }
 
   return MS.struct.generator.atomGroups(params)
+}
+
+function groupSegmentsByColor(segments: ProteinSegment[]): Map<string, ProteinSegment[]> {
+  const grouped = new Map<string, ProteinSegment[]>()
+
+  for (const segment of segments) {
+    const color = segment.color ?? DEFAULT_SEGMENT_COLOR
+    const bucket = grouped.get(color)
+    if (bucket) bucket.push(segment)
+    else grouped.set(color, [segment])
+  }
+
+  return grouped
+}
+
+function getSegmentGroupLoci(structure: Structure, segments: ProteinSegment[]): StructureElement.Loci | null {
+  const loci = StructureElement.Loci.fromExpression(
+    structure,
+    MS.struct.combinator.merge(segments.map(createSegmentExpression)),
+  )
+
+  return StructureElement.Loci.isEmpty(loci) ? null : loci
+}
+
+function buildOverpaintLayers(
+  structure: Structure,
+  segments: ProteinSegment[],
+): Array<{ bundle: ReturnType<typeof StructureElement.Bundle.fromLoci>; color: Color; clear: false }> {
+  const layers: Array<{ bundle: ReturnType<typeof StructureElement.Bundle.fromLoci>; color: Color; clear: false }> = []
+
+  for (const [color, colorSegments] of groupSegmentsByColor(segments)) {
+    const loci = getSegmentGroupLoci(structure, colorSegments)
+    if (!loci) continue
+    layers.push({
+      bundle: StructureElement.Bundle.fromLoci(loci),
+      color: Color.fromHexStyle(color),
+      clear: false,
+    })
+  }
+
+  return layers
 }

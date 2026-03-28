@@ -75,6 +75,8 @@ export function normalizeProteinSegments(segments: ProteinSegment[]): ProteinSeg
       previous &&
       previous.chainId === segment.chainId &&
       previous.sequenceIdKind === segment.sequenceIdKind &&
+      previous.color === segment.color &&
+      previous.label === segment.label &&
       segment.start <= previous.end + 1
     ) {
       previous.end = Math.max(previous.end, segment.end)

@@ -3,6 +3,7 @@ import {
   collectProteinSegmentsFromGenes,
   detectProteinStructureFormat,
   extractProteinPosition,
+  normalizeProteinSegments,
   pdbmlToPdb,
   prepareProteinStructureText,
 } from '../renderers/proteinStructure'
@@ -123,5 +124,17 @@ describe('protein structure helpers', () => {
     const position = extractProteinPosition(peptideRow)
 
     expect(position).toEqual({ start: 9, end: 12, sequenceIdKind: 'auth' })
+  })
+
+  test('does not merge adjacent segments when colors differ', () => {
+    expect(
+      normalizeProteinSegments([
+        { start: 10, end: 12, chainId: 'A', sequenceIdKind: 'auth', color: '#ff0000', label: 'A' },
+        { start: 13, end: 15, chainId: 'A', sequenceIdKind: 'auth', color: '#00ff00', label: 'B' },
+      ]),
+    ).toEqual([
+      { start: 10, end: 12, chainId: 'A', sequenceIdKind: 'auth', color: '#ff0000', label: 'A' },
+      { start: 13, end: 15, chainId: 'A', sequenceIdKind: 'auth', color: '#00ff00', label: 'B' },
+    ])
   })
 })
