@@ -16,12 +16,28 @@ import {
 import type { DataModel } from './model/types'
 
 const ZOOM_FACTOR = 1.25
+const MOD_FILTER_ALL = '__ALL__'
+const MOD_FILTER_MODIFIED = '__MODIFIED__'
+const MOD_FILTER_HIDE_UNMODIFIED = '__HIDE_UNMODIFIED__'
+
+const MOD_COLOR_PALETTE = [
+  '#f4c145',
+  '#66c2a5',
+  '#fc8d62',
+  '#8da0cb',
+  '#e78ac3',
+  '#a6d854',
+  '#ffd92f',
+  '#e5c494',
+]
 
 export class App {
   private viewport = new Viewport()
   private colorScale = new ColorScale(COLOR_SCHEMES.YellowBlue, 3)
   private model: DataModel | null = null
+  private baseModel: DataModel | null = null
   private detailModel: DataModel | null = null
+  private modFilter = MOD_FILTER_ALL
 
   // Renderers
   private heatmapRenderer!: HeatmapRenderer
@@ -87,6 +103,8 @@ export class App {
   private pendingFit = false
   private pendingDetailFit = false
   private loadedProteinUrl: string | null = null
+  private currentFilename = 'dataset'
+  private currentProteinUrl?: string
 
   // ResizeObserver
   private resizeObserver!: ResizeObserver
@@ -252,6 +270,12 @@ export class App {
       this.detailHeatmapRenderer.render()
     }
     slider.addEventListener('input', syncContrast)
+
+    const modFilterEl = document.getElementById('mod-filter') as HTMLSelectElement
+    modFilterEl.addEventListener('change', () => {
+      this.modFilter = modFilterEl.value
+      this.applyCurrentFilter()
+    })
 
     // Zoom buttons
     document.getElementById('zoom-fit')!.addEventListener('click', () => {
@@ -463,6 +487,10 @@ export class App {
   }
 
   private async applyModel(model: DataModel, filename: string, proteinUrl?: string): Promise<void> {
+    this.baseModel = model
+    this.currentFilename = filename
+    this.currentProteinUrl = proteinUrl
+    this.populateModificationFilter(model)
     this.model = model
     this.detailModel = null
     this.geneSelection = null
@@ -692,6 +720,9 @@ export class App {
     model.genes.forEach((gene, index) => {
       const item = document.createElement('div')
       item.className = 'annotation-item'
+      const modColor = this.getGeneModificationColor(gene)
+      item.classList.add('has-mod-color')
+      item.style.setProperty('--annotation-mod-color', modColor)
       item.dataset['geneIndex'] = String(index)
       if (index === this.detailSelectedGeneIndex) item.classList.add('is-active')
       item.addEventListener('click', () => this.selectDetailGene(index))
@@ -701,11 +732,21 @@ export class App {
       geneEl.textContent = gene.yorf || gene.gid || 'Unknown gene'
 
       const nameEl = document.createElement('div')
-      nameEl.className = 'annotation-name'
-      nameEl.textContent = gene.name || '(no annotation)'
+      nameEl.className = 'annotation-name annotation-mod'
+      nameEl.textContent = this.makeGenePrimaryLabel(gene)
+
+      const metaEl = document.createElement('div')
+      metaEl.className = 'annotation-meta'
+      metaEl.textContent = this.makeGeneSecondaryLabel(gene)
+
+      const sequenceEl = document.createElement('div')
+      sequenceEl.className = 'annotation-sequence'
+      sequenceEl.textContent = gene.baseSequence ? `Sequence: ${gene.baseSequence}` : 'Sequence unavailable'
 
       item.appendChild(geneEl)
       item.appendChild(nameEl)
+      item.appendChild(metaEl)
+      item.appendChild(sequenceEl)
       frag.appendChild(item)
     })
 
@@ -771,6 +812,77 @@ export class App {
   private describeProteinSegments(segments: ReturnType<typeof collectProteinSegmentsFromGenes>): string {
     const residueCount = segments.reduce((sum, segment) => sum + (segment.end - segment.start + 1), 0)
     return `${segments.length} segment${segments.length === 1 ? '' : 's'} highlighted across ${residueCount} residues.`
+  }
+
+  private applyCurrentFilter(): void {
+    if (!this.baseModel) return
+
+    const filteredGenes = this.baseModel.genes.filter((gene) => this.matchesModificationFilter(gene))
+    const nextModel: DataModel = {
+      ...this.baseModel,
+      genes: filteredGenes,
+    }
+    nextModel.expressionMatrix = filteredGenes.map((gene) => [...gene.values])
+    this.model = nextModel
+    void this.applyModel(nextModel, this.currentFilename, this.currentProteinUrl)
+  }
+
+  private populateModificationFilter(model: DataModel): void {
+    const select = document.getElementById('mod-filter') as HTMLSelectElement
+    const dynamicOptions = model.modificationCategories.filter((value) =>
+      ![MOD_FILTER_ALL, MOD_FILTER_MODIFIED, MOD_FILTER_HIDE_UNMODIFIED].includes(value),
+    )
+    select.innerHTML = ''
+    const options: Array<[string, string]> = [
+      [MOD_FILTER_ALL, 'All peptides'],
+      ['Unmodified', 'Unmodified only'],
+      [MOD_FILTER_MODIFIED, 'Modified only'],
+      [MOD_FILTER_HIDE_UNMODIFIED, 'Hide unmodified'],
+      ...dynamicOptions.map((value): [string, string] => [value, value]),
+    ]
+    options.forEach(([value, label]) => {
+      const option = document.createElement('option')
+      option.value = value
+      option.textContent = label
+      select.appendChild(option)
+    })
+    select.value = this.modFilter
+  }
+
+  private matchesModificationFilter(gene: DataModel['genes'][number]): boolean {
+    if (this.modFilter === MOD_FILTER_ALL) return true
+    if (this.modFilter === 'Unmodified') return !gene.modifications.hasModification
+    if (this.modFilter === MOD_FILTER_MODIFIED) return gene.modifications.hasModification
+    if (this.modFilter === MOD_FILTER_HIDE_UNMODIFIED) return gene.modifications.hasModification
+    return gene.modifications.category === this.modFilter || gene.modifications.modifications.some((mod) => mod.normalizedName === this.modFilter)
+  }
+
+  private makeGenePrimaryLabel(gene: DataModel['genes'][number]): string {
+    const position = this.makeProteinPositionLabel(gene)
+    return `${position} · ${gene.modifications.displayLabel}`
+  }
+
+  private makeGeneSecondaryLabel(gene: DataModel['genes'][number]): string {
+    const title = gene.name || gene.annotation || gene.yorf || 'Unknown peptide'
+    return `${title} · ${gene.modifications.category}`
+  }
+
+  private makeProteinPositionLabel(gene: DataModel['genes'][number]): string {
+    const start = gene.metadata['PEPTIDE_START'] || gene.metadata['START'] || gene.metadata['START_POS']
+    const end = gene.metadata['PEPTIDE_END'] || gene.metadata['END'] || gene.metadata['END_POS']
+    const range = gene.metadata['PEPTIDE_RANGE'] || gene.metadata['PEPTIDE']
+    if (start && end) return `${start}-${end}`
+    if (range) return range
+    const modPositions = gene.modifications.modifications.map((mod) => mod.position).filter((value): value is number => value !== null)
+    if (modPositions.length > 0) return `pos ${modPositions.join(',')}`
+    return gene.baseSequence ?? gene.yorf
+  }
+
+  private getGeneModificationColor(gene: DataModel['genes'][number]): string {
+    const key = gene.modifications.modifications[0]?.normalizedName ?? gene.modifications.category
+    let hash = 0
+    for (let i = 0; i < key.length; i++) hash = (hash * 31 + key.charCodeAt(i)) >>> 0
+    return MOD_COLOR_PALETTE[hash % MOD_COLOR_PALETTE.length] ?? '#f4c145'
   }
 
   private updateDetailSelectionBand(): void {
@@ -890,8 +1002,8 @@ export class App {
 
       const label = document.createElement('div')
       label.className = 'gene-label'
-      label.textContent = gene.name ?? gene.yorf
-      label.title = gene.annotation ? gene.annotation : label.textContent
+      label.textContent = this.makeGenePrimaryLabel(gene)
+      label.title = `${this.makeGeneSecondaryLabel(gene)}${gene.baseSequence ? `\n${gene.baseSequence}` : ''}`
       label.style.top = `${gAxis.indexToPixel(i + 0.5)}px`
       frag.appendChild(label)
     }

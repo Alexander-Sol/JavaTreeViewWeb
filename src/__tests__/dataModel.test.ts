@@ -64,6 +64,7 @@ describe('buildSubsetModel', () => {
 
     const model: DataModel = {
       genes: [makeGene('g0'), makeGene('g1'), makeGene('g2'), makeGene('g3')],
+      allGenes: [makeGene('g0'), makeGene('g1'), makeGene('g2'), makeGene('g3')],
       sampleNames: ['s0', 's1', 's2'],
       expressionMatrix: [
         [1, 2, 3],
@@ -87,6 +88,7 @@ describe('buildSubsetModel', () => {
       valueMin: 1,
       valueMax: 12,
       valueMeanAbsolute: 6.5,
+      modificationCategories: ['Unmodified'],
     }
 
     const subset = buildSubsetModel(model, [2, 3], null)
@@ -106,6 +108,7 @@ describe('buildSubsetModel', () => {
   test('slices both axes when gene and sample ranges are provided', () => {
     const model: DataModel = {
       genes: [makeGene('g0'), makeGene('g1'), makeGene('g2')],
+      allGenes: [makeGene('g0'), makeGene('g1'), makeGene('g2')],
       sampleNames: ['s0', 's1', 's2', 's3'],
       expressionMatrix: [
         [1, 2, 3, 4],
@@ -119,6 +122,7 @@ describe('buildSubsetModel', () => {
       valueMin: 1,
       valueMax: 12,
       valueMeanAbsolute: 6.5,
+      modificationCategories: ['Unmodified'],
     }
 
     const subset = buildSubsetModel(model, [1, 2], [1, 2])

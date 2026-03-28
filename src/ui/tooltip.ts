@@ -31,6 +31,7 @@ export class Tooltip {
     this.el.innerHTML = `
       <div class="tooltip-gene">${escHtml(gene.yorf)}${gene.name ? ' — ' + escHtml(gene.name.trim()) : ''}</div>
       <div class="tooltip-sample">${escHtml(sample)}</div>
+      <div class="tooltip-sample">${escHtml(gene.baseSequence ?? gene.name ?? 'Unknown peptide')} · ${escHtml(gene.modifications.displayLabel)}</div>
       <div class="tooltip-value">
         <span class="tooltip-swatch" style="background:${swatchColor}"></span>
         ${valStr}

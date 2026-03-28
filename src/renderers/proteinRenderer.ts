@@ -1,6 +1,7 @@
 import { Viewer } from 'molstar/lib/apps/viewer/app'
 import { StructureSelectionQuery } from 'molstar/lib/mol-plugin-state/helpers/structure-selection-query'
 import { MolScriptBuilder as MS } from 'molstar/lib/mol-script/language/builder'
+import { Color } from 'molstar/lib/mol-util/color'
 import type { ProteinSegment, ProteinStructureFormat } from './proteinStructure'
 import { normalizeProteinSegments, prepareProteinStructureText } from './proteinStructure'
 
@@ -10,6 +11,7 @@ export class ProteinRenderer {
   private loadVersion = 0
   private hasStructure = false
   private highlightedSegments: ProteinSegment[] = []
+  private readonly defaultColor = Color.fromHexStyle('#f4c145')
 
   constructor(private readonly container: HTMLElement) {}
 
@@ -63,6 +65,8 @@ export class ProteinRenderer {
     if (this.highlightedSegments.length === 0) return
 
     selectionManager.fromSelectionQuery('set', buildSegmentQuery(this.highlightedSegments), true)
+
+    viewer.plugin.canvas3d?.setProps({ renderer: { highlightColor: this.defaultColor } })
   }
 
   private async getViewer(): Promise<Viewer> {

@@ -89,6 +89,7 @@ export interface TreeNode {
 export interface DataModel {
   /** Genes in display order (tree leaf order if tree present, else CDT row order) */
   genes: GeneRow[]
+  allGenes: GeneRow[]
   /** Sample names in display order */
   sampleNames: string[]
   /** [geneIndex][sampleIndex], null = missing */
@@ -105,6 +106,7 @@ export interface DataModel {
   valueMax: number
   /** Mean of |values|, used to auto-set contrast */
   valueMeanAbsolute: number
+  modificationCategories: string[]
 }
 
 // ============================================================

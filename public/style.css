@@ -289,6 +289,11 @@ input[type="range"] {
   box-shadow: inset 2px 0 0 rgba(255, 200, 0, 0.7);
 }
 
+.annotation-item.has-mod-color {
+  border-left: 4px solid var(--annotation-mod-color, transparent);
+  padding-left: 8px;
+}
+
 .annotation-gene {
   color: var(--text);
   font-size: 12px;
@@ -300,6 +305,20 @@ input[type="range"] {
   font-size: 11px;
   line-height: 1.4;
   margin-top: 2px;
+}
+
+.annotation-meta,
+.annotation-sequence {
+  color: var(--text-muted);
+  font-size: 10px;
+  line-height: 1.4;
+  margin-top: 4px;
+}
+
+.annotation-mod {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--annotation-mod-color, var(--text));
 }
 
 .detail-selection-band {

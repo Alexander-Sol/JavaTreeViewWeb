@@ -8,6 +8,8 @@ export interface ProteinSegment {
   end: number
   chainId?: string
   sequenceIdKind?: ProteinSequenceIdKind
+  color?: string
+  label?: string
 }
 
 const START_KEYS = [

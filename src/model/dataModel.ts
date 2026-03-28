@@ -50,6 +50,7 @@ export function buildDataModel(
 
   // Reorder genes and sample names
   const genes: GeneRow[] = geneDisplayOrder.map((i) => cdtData.genes[i]!)
+  const modificationCategories = collectModificationCategories(cdtData.genes)
   const sampleNames: string[] = sampleDisplayOrder.map((i) => cdtData.sampleNames[i]!)
 
   // Build expression matrix [geneDisplayIdx][sampleDisplayIdx]
@@ -80,6 +81,7 @@ export function buildDataModel(
 
   return {
     genes,
+    allGenes: cdtData.genes,
     sampleNames,
     expressionMatrix,
     geneTree,
@@ -89,6 +91,7 @@ export function buildDataModel(
     valueMin,
     valueMax,
     valueMeanAbsolute,
+    modificationCategories,
   }
 }
 
@@ -115,14 +118,25 @@ export function buildSubsetModel(
 
   return {
     genes,
+    allGenes: model.allGenes,
     sampleNames,
     expressionMatrix,
     geneTree,
     arrayTree,
     geneTreeCorrMin: computeCorrMin(geneTree),
     arrayTreeCorrMin: computeCorrMin(arrayTree),
+    modificationCategories: model.modificationCategories,
     ...computeValueStats(expressionMatrix),
   }
+}
+
+function collectModificationCategories(genes: GeneRow[]): string[] {
+  const categories = new Set<string>()
+  for (const gene of genes) {
+    categories.add(gene.modifications.category)
+    for (const mod of gene.modifications.modifications) categories.add(mod.normalizedName)
+  }
+  return Array.from(categories).sort((a, b) => a.localeCompare(b))
 }
 
 // ============================================================

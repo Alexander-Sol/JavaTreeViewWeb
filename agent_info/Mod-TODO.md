@@ -7,7 +7,7 @@ Add peptide modification awareness throughout the import, data model, filtering,
 ## Status
 
 - [x] Phase 1 complete
-- [ ] Phase 2 complete
+- [x] Phase 2 complete
 - [ ] Phase 3 complete
 
 ## Reference
@@ -37,14 +37,14 @@ Add peptide modification awareness throughout the import, data model, filtering,
 
 ### 2.1 Improve peptide labels
 
-- [ ] Replace raw peptide-sequence-first labels with labels that emphasize protein position and modification state.
-- [ ] Display each peptide label as a combination of its protein position and modification state.
-- [ ] Move the raw peptide sequence into annotation details and/or hover text instead of using it as the main label.
+- [x] Replace raw peptide-sequence-first labels with labels that emphasize protein position and modification state.
+- [x] Display each peptide label as a combination of its protein position and modification state.
+- [x] Move the raw peptide sequence into annotation details and/or hover text instead of using it as the main label.
 
 ### 2.2 Visual encoding for modifications
 
-- [ ] Add options to color-code modifications in the annotation list.
-- [ ] Add options to color-code modifications on the Mol* protein structure display.
+- [x] Add options to color-code modifications in the annotation list.
+- [x] Add options to color-code modifications on the Mol* protein structure display.
 
 ## Phase 3: Filtering
 
@@ -66,3 +66,4 @@ Add peptide modification awareness throughout the import, data model, filtering,
 
 - Add implementation notes, blockers, and verification results here as work proceeds.
 - Phase 1: added peptide modification parsing and synonym normalization in `src/parsers/cdtParser.ts`; stored normalized summaries and per-site mod details on `GeneRow`; verified with `bun test` and `bun run typecheck`.
+- Phase 2: updated labels, annotations, and hover details to foreground protein position plus modification state; added modification color coding in annotation rows and Mol* highlight styling; verified with `bun test`, `bun run typecheck`, and `bun run build`.
