@@ -1,6 +1,8 @@
 import { describe, test, expect, beforeEach } from 'bun:test'
 import { AxisViewport } from '../renderers/viewport'
+import { findTightVisibleRoot, isNodeFullyVisible } from '../renderers/dendrogramRenderer'
 import { pixelToItemIndex, computeSelectionRange } from '../ui/selectionManager'
+import type { TreeNode } from '../model/types'
 
 // ============================================================
 // AxisViewport coordinate math
@@ -182,5 +184,121 @@ describe('computeSelectionRange with panned viewport', () => {
     expect(range).not.toBeNull()
     expect(range!.lo).toBe(50)
     expect(range!.hi).toBe(55)
+  })
+})
+
+// ============================================================
+// Dendrogram visible root selection
+// ============================================================
+
+describe('findTightVisibleRoot', () => {
+  const leaf = (id: string, index: number): TreeNode => ({
+    id,
+    correlation: 1,
+    index,
+    minIndex: index,
+    maxIndex: index,
+    isLeaf: true,
+    left: null,
+    right: null,
+  })
+
+  test('keeps full root when visible span crosses both children', () => {
+    const root: TreeNode = {
+      id: 'root',
+      correlation: 0.2,
+      index: 1.5,
+      minIndex: 0,
+      maxIndex: 3,
+      isLeaf: false,
+      left: {
+        id: 'left',
+        correlation: 0.6,
+        index: 0.5,
+        minIndex: 0,
+        maxIndex: 1,
+        isLeaf: false,
+        left: leaf('l0', 0),
+        right: leaf('l1', 1),
+      },
+      right: {
+        id: 'right',
+        correlation: 0.7,
+        index: 2.5,
+        minIndex: 2,
+        maxIndex: 3,
+        isLeaf: false,
+        left: leaf('r0', 2),
+        right: leaf('r1', 3),
+      },
+    }
+
+    expect(findTightVisibleRoot(root, 0.2, 2.8).id).toBe('root')
+  })
+
+  test('descends into a single visible subtree when zoomed in', () => {
+    const leftSubtree: TreeNode = {
+      id: 'left',
+      correlation: 0.6,
+      index: 0.5,
+      minIndex: 0,
+      maxIndex: 1,
+      isLeaf: false,
+      left: leaf('l0', 0),
+      right: leaf('l1', 1),
+    }
+    const root: TreeNode = {
+      id: 'root',
+      correlation: 0.2,
+      index: 1.5,
+      minIndex: 0,
+      maxIndex: 3,
+      isLeaf: false,
+      left: leftSubtree,
+      right: {
+        id: 'right',
+        correlation: 0.7,
+        index: 2.5,
+        minIndex: 2,
+        maxIndex: 3,
+        isLeaf: false,
+        left: leaf('r0', 2),
+        right: leaf('r1', 3),
+      },
+    }
+
+    expect(findTightVisibleRoot(root, 0, 1)).toBe(leftSubtree)
+  })
+})
+
+describe('isNodeFullyVisible', () => {
+  test('returns false when a node extends outside the tight visible range', () => {
+    const node: TreeNode = {
+      id: 'parent',
+      correlation: 0.4,
+      index: 1.5,
+      minIndex: 0,
+      maxIndex: 3,
+      isLeaf: false,
+      left: null,
+      right: null,
+    }
+
+    expect(isNodeFullyVisible(node, 1, 2)).toBe(false)
+  })
+
+  test('returns true when the whole node span is visible', () => {
+    const node: TreeNode = {
+      id: 'parent',
+      correlation: 0.4,
+      index: 1.5,
+      minIndex: 1,
+      maxIndex: 2,
+      isLeaf: false,
+      left: null,
+      right: null,
+    }
+
+    expect(isNodeFullyVisible(node, 1, 2)).toBe(true)
   })
 })

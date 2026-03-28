@@ -76,34 +76,25 @@ export class DendrogramRenderer {
 
     // Determine visible leaf index range for culling
     const dimSize = this.orientation === 'left' ? height : width
+    const tightVisFirst = Math.max(0, Math.floor(indexAxis.pixelToIndex(0)))
+    const tightVisLast = Math.min(indexAxis.count - 1, Math.ceil(indexAxis.pixelToIndex(dimSize)) - 1)
     const visFirst = Math.max(0, indexAxis.pixelToIndex(0) - 1)
     const visLast = indexAxis.pixelToIndex(dimSize) + 1
+    const visibleRoot = findTightVisibleRoot(this.tree, tightVisFirst, tightVisLast)
+    const drawableNodes = collectDrawableNodes(visibleRoot, visFirst, visLast, tightVisFirst, tightVisLast)
 
     // Correlation → pixel on the depth axis
-    const corrToPixel = this.makeCorrToPixel(width, height)
+    const corrToPixel = this.makeVisibleCorrToPixel(width, height, visibleRoot, drawableNodes)
     const selectedSubtree = this.selectedNodeId
       ? findNodeById(this.tree, this.selectedNodeId)
       : null
 
     // Traverse tree iteratively, drawing each internal node
-    const stack: TreeNode[] = [this.tree]
-
     this.ctx.lineWidth = 1
 
-    while (stack.length > 0) {
-      const node = stack.pop()!
-      if (node.isLeaf) continue
-
-      // Cull nodes entirely outside the visible range
-      if (node.maxIndex < visFirst || node.minIndex > visLast) continue
-
+    for (const node of drawableNodes) {
       const left = node.left!
       const right = node.right!
-
-      // Push children for further drawing
-      if (!left.isLeaf) stack.push(left)
-      if (!right.isLeaf) stack.push(right)
-
       this.drawNode(node, left, right, indexAxis, corrToPixel, selectedSubtree)
     }
   }
@@ -175,13 +166,24 @@ export class DendrogramRenderer {
    * For 'left': root (low corr) → left edge (px 0), leaves (corr 1.0) → right edge (px width)
    * For 'top':  root (low corr) → top edge (px 0), leaves (corr 1.0) → bottom edge (px height)
    */
-  private makeCorrToPixel(width: number, height: number): (corr: number) => number {
-    const range = 1.0 - this.corrMin
-    if (this.orientation === 'left') {
-      return (corr) => ((corr - this.corrMin) / range) * width
-    } else {
-      return (corr) => ((corr - this.corrMin) / range) * height
-    }
+  private makeVisibleCorrToPixel(
+    width: number,
+    height: number,
+    visibleRoot: TreeNode,
+    drawableNodes: TreeNode[],
+  ): (corr: number) => number {
+    const size = this.orientation === 'left' ? width : height
+    const corrValues = new Set<number>([visibleRoot.correlation, 1.0])
+    for (const node of drawableNodes) corrValues.add(node.correlation)
+    const sorted = Array.from(corrValues).sort((a, b) => a - b)
+    const maxIndex = Math.max(sorted.length - 1, 1)
+    const positions = new Map<number, number>()
+
+    sorted.forEach((corr, index) => {
+      positions.set(corr, (index / maxIndex) * size)
+    })
+
+    return (corr) => positions.get(corr) ?? size
   }
 
   /**
@@ -193,23 +195,19 @@ export class DendrogramRenderer {
 
     const { width, height } = this.canvas
     const indexAxis = this.orientation === 'left' ? this.viewport.genes : this.viewport.samples
-    const corrToPixel = this.makeCorrToPixel(width, height)
     const dimSize = this.orientation === 'left' ? height : width
+    const tightVisFirst = Math.max(0, Math.floor(indexAxis.pixelToIndex(0)))
+    const tightVisLast = Math.min(indexAxis.count - 1, Math.ceil(indexAxis.pixelToIndex(dimSize)) - 1)
     const visFirst = Math.max(0, indexAxis.pixelToIndex(0) - 1)
     const visLast = indexAxis.pixelToIndex(dimSize) + 1
+    const visibleRoot = findTightVisibleRoot(this.tree, tightVisFirst, tightVisLast)
+    const drawableNodes = collectDrawableNodes(visibleRoot, visFirst, visLast, tightVisFirst, tightVisLast)
+    const corrToPixel = this.makeVisibleCorrToPixel(width, height, visibleRoot, drawableNodes)
 
     let best: TreeNode | null = null
     let bestDist = Infinity
 
-    const stack: TreeNode[] = [this.tree]
-    while (stack.length > 0) {
-      const node = stack.pop()!
-      if (node.isLeaf) continue
-      if (node.left && !node.left.isLeaf) stack.push(node.left)
-      if (node.right && !node.right.isLeaf) stack.push(node.right)
-
-      if (node.maxIndex < visFirst || node.minIndex > visLast) continue
-
+    for (const node of drawableNodes) {
       const dist = computeNodeHitDistance(
         node,
         this.orientation,
@@ -253,6 +251,56 @@ function findNodeById(root: TreeNode, targetId: string): TreeNode | null {
     (root.left ? findNodeById(root.left, targetId) : null) ||
     (root.right ? findNodeById(root.right, targetId) : null)
   )
+}
+
+export function findTightVisibleRoot(root: TreeNode, visFirst: number, visLast: number): TreeNode {
+  let current = root
+
+  while (!current.isLeaf && current.left && current.right) {
+    if (visLast < current.right.minIndex) {
+      current = current.left
+      continue
+    }
+    if (visFirst > current.left.maxIndex) {
+      current = current.right
+      continue
+    }
+    break
+  }
+
+  return current
+}
+
+export function isNodeFullyVisible(node: TreeNode, visFirst: number, visLast: number): boolean {
+  return node.minIndex >= visFirst && node.maxIndex <= visLast
+}
+
+function collectDrawableNodes(
+  root: TreeNode,
+  visFirst: number,
+  visLast: number,
+  tightVisFirst: number,
+  tightVisLast: number,
+): TreeNode[] {
+  const nodes: TreeNode[] = []
+  const stack: TreeNode[] = [root]
+
+  while (stack.length > 0) {
+    const node = stack.pop()!
+    if (node.isLeaf) continue
+    if (node.maxIndex < visFirst || node.minIndex > visLast) continue
+
+    const left = node.left
+    const right = node.right
+    if (left && !left.isLeaf) stack.push(left)
+    if (right && !right.isLeaf) stack.push(right)
+
+    if (isNodeFullyVisible(node, tightVisFirst, tightVisLast)) {
+      nodes.push(node)
+    }
+  }
+
+  return nodes
 }
 
 export function isNodeInSelectedSubtree(root: TreeNode, selectedNodeId: string, nodeId: string): boolean {
