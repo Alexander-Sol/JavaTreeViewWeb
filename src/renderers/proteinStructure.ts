@@ -1,4 +1,5 @@
 import type { GeneRow } from '../model/types'
+import { getGeneModificationColor } from '../ui/modColors'
 
 export type ProteinStructureFormat = 'pdb' | 'pdbxml'
 export type ProteinSequenceIdKind = 'auth' | 'label'
@@ -92,10 +93,17 @@ export function collectProteinSegmentsFromGenes(genes: GeneRow[]): ProteinSegmen
     const sequenceIdKind: ProteinSequenceIdKind =
       getMetadataValue(metadata, LABEL_SEQ_HINT_KEYS) ? 'label' : 'auth'
 
-    const directStart = parseInteger(getMetadataValue(metadata, START_KEYS))
-    const directEnd = parseInteger(getMetadataValue(metadata, END_KEYS))
-    if (directStart !== null && directEnd !== null) {
-      segments.push({ start: directStart, end: directEnd, chainId, sequenceIdKind })
+      const directStart = parseInteger(getMetadataValue(metadata, START_KEYS))
+      const directEnd = parseInteger(getMetadataValue(metadata, END_KEYS))
+      if (directStart !== null && directEnd !== null) {
+      segments.push({
+        start: directStart,
+        end: directEnd,
+        chainId,
+        sequenceIdKind,
+        color: getGeneModificationColor(gene),
+        label: gene.modifications.displayLabel,
+      })
       continue
     }
 
@@ -110,6 +118,8 @@ export function collectProteinSegmentsFromGenes(genes: GeneRow[]): ProteinSegmen
       end: parsedRange.end,
       chainId,
       sequenceIdKind,
+      color: getGeneModificationColor(gene),
+      label: gene.modifications.displayLabel,
     })
   }
 

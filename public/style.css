@@ -461,6 +461,7 @@ canvas {
   left: 4px;
   right: 4px;
   transform: translateY(-50%);
+  font-weight: 600;
 }
 
 .sample-label {
