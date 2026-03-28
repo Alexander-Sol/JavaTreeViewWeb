@@ -8,7 +8,7 @@ Add peptide modification awareness throughout the import, data model, filtering,
 
 - [x] Phase 1 complete
 - [x] Phase 2 complete
-- [ ] Phase 3 complete
+- [x] Phase 3 complete
 
 ## Reference
 
@@ -50,9 +50,9 @@ Add peptide modification awareness throughout the import, data model, filtering,
 
 ### 3.1 Filter peptides by modification category
 
-- [ ] Add filtering options for displayed peptides (heatmap rows) by modification category.
-- [ ] Support filtering out unmodified peptides.
-- [ ] Support showing only peptides matching a selected modification category, e.g. phosphorylated peptides.
+- [x] Add filtering options for displayed peptides (heatmap rows) by modification category.
+- [x] Support filtering out unmodified peptides.
+- [x] Support showing only peptides matching a selected modification category, e.g. phosphorylated peptides.
 
 ## Suggested Implementation Order
 
@@ -67,3 +67,4 @@ Add peptide modification awareness throughout the import, data model, filtering,
 - Add implementation notes, blockers, and verification results here as work proceeds.
 - Phase 1: added peptide modification parsing and synonym normalization in `src/parsers/cdtParser.ts`; stored normalized summaries and per-site mod details on `GeneRow`; verified with `bun test` and `bun run typecheck`.
 - Phase 2: updated labels, annotations, and hover details to foreground protein position plus modification state; added modification color coding in annotation rows and Mol* highlight styling; verified with `bun test`, `bun run typecheck`, and `bun run build`.
+- Phase 3: added toolbar filtering for unmodified-only, modified-only, hide-unmodified, and specific modification categories; verified with `bun test`, `bun run typecheck`, and `bun run build`.

@@ -21,4 +21,16 @@ describe('cdtParser modification support', () => {
     expect(second?.modifications.displayLabel).toBe('Phosphorylation')
     expect(second?.modifications.category).toBe('Biological Mod')
   })
+
+  test('classifies unmodified peptides when no brackets are present', () => {
+    const cdt = [
+      'GID\tYORF\tNAME\tGWEIGHT\tSample1',
+      'AID\t\t\t\tARRY1',
+      'GENE1X\tP12345\tPEPTIDEK\t1\t2.0',
+    ].join('\n')
+
+    const parsed = parseCdt(cdt)
+    expect(parsed.genes[0]?.modifications.category).toBe('Unmodified')
+    expect(parsed.genes[0]?.modifications.hasModification).toBe(false)
+  })
 })
